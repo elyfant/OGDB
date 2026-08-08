@@ -1,0 +1,18 @@
+# Curated NVS terms actually used by OGF equipment. Grow this list as
+# real equipment models get matched against vocab.nerc.ac.uk, then run:
+#   python scripts/sync_nvs_terms.py
+#
+# Deliberately curated, not a full collection mirror — L05/L22 together
+# have 800+ terms, almost all irrelevant to gliders (plankton nets, ice
+# profilers, ship codes...). Only add a term here once it's actually
+# needed for a real sensor in the fleet.
+#
+# Currently wired into the schema: L05 (sensor_family) and L22 (model)
+# on asset_sensor_details. platforms/L06/B76 are a deferred follow-up —
+# see design-notes.md.
+#
+# Format:
+# - uri: http://vocab.nerc.ac.uk/collection/L22/current/TOOL0942/
+#   note: why this term is here (which equipment it matches)
+
+[]
