@@ -634,6 +634,50 @@ This completes the backfill (Phases 1–3). Migration chain:
 `xxxx_seed_more_service_event_types` (head). Remaining open item: task
 #9 (NVS-back `platforms` via L06/B76), deliberately deferred.
 
+## Legacy table cleanup (2026-08-10)
+
+`xxxx_drop_backfilled_legacy_tables.py` — dropped the 21 fully-backfilled
+legacy tables (everything from Phases 1-3 except `gliders`) plus 10
+legacy convenience views that only existed to make them readable.
+
+**Two real blockers found and handled, not anticipated when this was
+scoped as "just drop the tables":**
+- `gliders` stayed — `norglider_missions` and `flask_missions` (real,
+  currently-working views) still depend on it, and `missions` was never
+  cut over to reference `assets` directly. Checked `flask_missions`'s
+  actual definition rather than assuming: it doesn't touch the dropped
+  columns/tables at all. `norglider_missions` did (it still selected
+  `slocum_deployment_id`/`seaglider_deployment_id` directly) — redefined
+  it (DROP + CREATE, same reason as the original missions rework:
+  Postgres won't let CREATE OR REPLACE remove columns) to drop just
+  those two columns from its output, then dropped
+  `missions.slocum_deployment_id`/`seaglider_deployment_id` outright —
+  their own stated purpose ("retained for historical data migration
+  only") is fulfilled now that Phase 3 moved that history into
+  `asset_assignments`.
+- 8 `log_*` tables (log_ct_sensors, log_do_sensors, log_eco_sensors,
+  log_mr_sensors, log_section_aft, log_section_end_cap,
+  log_section_forward, log_section_payload) had live FK constraints into
+  tables being dropped. Dropped just the constraints, not the tables —
+  every `log_*` table and every row in it (171 total across the
+  `event_log`/`log_*` family, unchanged from the earlier count) is still
+  there, completely untouched. This was checked properly via
+  `pg_constraint`/`pg_attribute` directly after `information_schema`'s
+  multi-table join produced wrong constraint-to-column matches on the
+  first attempt.
+
+Full FK-dependency check was done with `pg_constraint` before touching
+anything (not just `pg_depend`/views, which is what caught the first
+issue but missed these). Verified after: all 21 tables gone, `gliders`
++ every `log_*` table's data intact, `assets`/`asset_assignments` counts
+unchanged (178/88), both missions views still return their full 103 rows.
+
+Remaining legacy surface, deliberately untouched: `event_log` family +
+`log_*` tables (171 real rows, needs its own migration pass — see
+"Known gap" note below), `gliders` (blocked on a `missions` cutover to
+`assets`), and the still-actively-used shared tables (`platforms`,
+`manufacturers`, `institutes`, `status`, `firmware`, etc.).
+
 ## What's next: the backfill (today's task)
 
 Populate `assets` from existing per-type tables, and reconstruct
