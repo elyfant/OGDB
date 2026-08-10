@@ -734,6 +734,14 @@ Missions is now fully connected to `assets` — the entire reason
 the `event_log`/`log_*` family (171 real rows, still needs its own
 migration pass) and task #9 (NVS-backing `platforms`).
 
+## users.name dropped (2026-08-10)
+
+`xxxx_drop_users_name.py` — pure duplication of the linked contact's
+`first_name`/`last_name`. `users.email` stays (login identifier, a
+different concept from `contacts.email`), `contact_id` stays nullable
+(so a non-person account, e.g. an OGDP automation account, can exist
+without a fabricated `contacts` row). `users` had 0 rows — nothing lost.
+
 ## What's next: the backfill (today's task)
 
 Populate `assets` from existing per-type tables, and reconstruct
