@@ -678,6 +678,62 @@ Remaining legacy surface, deliberately untouched: `event_log` family +
 `assets`), and the still-actively-used shared tables (`platforms`,
 `manufacturers`, `institutes`, `status`, `firmware`, etc.).
 
+## missions → assets bridge (2026-08-10)
+
+`xxxx_missions_glider_asset_id.py` — added `missions.glider_asset_id`
+(FK → `assets.id`), populated via `legacy_asset_id_map` (not a
+`serial_number` match — Fiona suggested matching on `sn`, but the id map
+Phase 1 built is the exact, guaranteed mapping, no risk of a formatting
+mismatch). Redefined `norglider_missions` and `flask_missions` to join
+through `assets`/`asset_glider_details` instead of the legacy `gliders`
+table. Verified: 103/103 missions with a glider got `glider_asset_id`
+populated, both views still return all 103 rows, and spot-checked real
+glider names match exactly between old and new paths (not just counts).
+
+**Deliberately incomplete**: the old `missions.glider` column and its FK
+to `gliders` are still there, alongside the new one — not dropped in
+this migration. That means `gliders` still can't be dropped yet
+(`missions.glider` is the only remaining thing pointing at it, now that
+`log_gliders` is the only other reference and that one's staying
+regardless). Natural next step once this is confirmed solid: drop
+`missions.glider`, then drop `gliders`.
+
+## has_lifting_bail dropped (2026-08-10)
+
+`xxxx_drop_has_lifting_bail.py` — Fiona confirmed `asset_glider_details.
+has_lifting_bail` is legacy and doesn't fit the current model; removed.
+Never held real data (every row defaulted to `false` during Phase 1,
+nothing was ever recorded against it), so nothing lost. `asset_glider_
+details` still has all 15 rows.
+
+## missions.glider dropped (2026-08-10)
+
+`xxxx_drop_missions_glider_column.py` — dropped the old
+`missions.glider` FK to `gliders.id` now that `glider_asset_id` is
+verified working. Checked `pg_depend` first, confirmed nothing else
+referenced it. Verified after: both `norglider_missions`/
+`flask_missions` still return all 103 rows, `missions` row count
+unchanged.
+
+`gliders` is now down to exactly one remaining reference:
+`log_gliders`' FK constraint — same shape as the `log_*` situation from
+yesterday's cleanup (real, unmigrated data; constraint could be severed
+without touching the table if `gliders` itself is ever dropped too).
+
+## gliders dropped (2026-08-10)
+
+`xxxx_drop_gliders.py` — the last legacy table from the original 22
+is gone. Severed `log_gliders`' FK first (14 real rows, left completely
+untouched, same treatment as the other `log_*` constraints), then
+dropped `gliders` itself. Verified: table gone, `log_gliders` data
+intact, both missions views still return all 103 rows, `assets`/
+`asset_assignments` unaffected (178/88).
+
+Missions is now fully connected to `assets` — the entire reason
+`gliders` needed to stick around is resolved. Remaining legacy surface:
+the `event_log`/`log_*` family (171 real rows, still needs its own
+migration pass) and task #9 (NVS-backing `platforms`).
+
 ## What's next: the backfill (today's task)
 
 Populate `assets` from existing per-type tables, and reconstruct
