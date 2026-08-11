@@ -4,6 +4,24 @@ Captured 2026-08-09 during a brainstorm session, before any web app work
 started. Not prioritized beyond the rough grouping below — pull from
 this once the MVP is up, don't feel bound to build in this order.
 
+## Stack decision (2026-08-10)
+
+New repo (separate from OGDB), mirroring the `amrit-dashway` structure
+Fiona already has working elsewhere: `dashboard/` (Next.js + Material UI),
+`gateway/` (NestJS — auth, API, the sanctioned read/write path into
+OGDB), `types/` (shared TypeScript domain types, no framework code).
+Same tooling carried over: Biome for lint/format, Husky pre-commit.
+
+Confirmed rationale: OGDB will be read/written by more than just this
+dashboard (per Fiona: yes, other consumers expected), so a real gateway
+earns its keep — it's where `users.role` (viewer/editor/admin, already
+in the schema) and eventual Feide auth get enforced once, rather than
+every consumer reimplementing permission checks. This differs from
+amrit-dashway's Gateway, which proxies an *external* API (OceanOPS) —
+OGDB's Gateway instead fronts our own Postgres directly, no third party
+involved. Scaffolding deliberately deferred to a fresh session/repo, not
+built inline here.
+
 ## MVP (the actual near-term goal)
 
 Two views, already validated against real backfilled data:
