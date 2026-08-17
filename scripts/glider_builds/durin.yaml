@@ -71,5 +71,4 @@ components:
      serial_number: "DUR-ex1"
      position: energy
      create: true
-     detail:
-       hull_model_id: 1
+     # detail: {hull_model_id: ...}   # add once hull_models has real rows
