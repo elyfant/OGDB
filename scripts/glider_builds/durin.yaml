@@ -36,10 +36,14 @@ components:
    - asset_type: slocum_hull
      serial_number: "2557"
      position: aft            # or fore / energy — hulls need a position
+     create: true
+     # detail: {hull_model_id: ...}   # add once you have the length/part-number lookup
 
    - asset_type: slocum_hull
      serial_number: "2549"
      position: fore            # or fore / energy — hulls need a position
+     create: true
+     # detail: {hull_model_id: ...}   # add once you have the length/part-number lookup
 
    - asset_type: battery
      serial_number: "85"
