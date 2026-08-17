@@ -51,7 +51,7 @@ components:
 
    - asset_type: battery
      serial_number: "84"
-     position: extended          # pitch / extended / aft
+     position: energy          # pitch / extended / aft
 
    - asset_type: ct_sensor
      serial_number: "9662"
