@@ -55,6 +55,7 @@ components:
 
    - asset_type: ct_sensor
      serial_number: "9662"
+     parent_ref: "1378"    # attaches to the payload bay below, not Durin directly
 
    - asset_type: slocum_payload_bay
      serial_number: "1378"
@@ -64,7 +65,7 @@ components:
   #
    - asset_type: slocum_hull
      serial_number: "DUR-ex1"
-     position: extended
+     position: energy
      create: true
      detail:
        hull_model_id: 1

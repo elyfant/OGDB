@@ -17,7 +17,11 @@ Worksheet shape (see scripts/glider_builds/durin.yaml for a real example):
 
     components:
       - asset_type: slocum_forward_section   # must match asset_types.name
-        serial_number: "560"                 # primary lookup key
+        serial_number: "560"                 # primary lookup key, and the
+                                              # default ref other components
+                                              # use to point at this one
+        # ref: fwd-section                   # explicit ref, if serial_number
+                                              # isn't unique/suitable as one
         # asset_id: 71                       # or look up by id directly
         # start_date: "2020-08-14"           # overrides glider.purchase_date
         # position: pitch                    # only needed when >1 of a type
@@ -25,6 +29,11 @@ Worksheet shape (see scripts/glider_builds/durin.yaml for a real example):
         # create: true                       # asset doesn't exist yet — create it
         # detail: {hull_model_id: 2}          # fields for the type's detail table
         # cal: {service_date: "2020-08-14", pump_type: "hd pump"}  # NEW cal row
+        # parent_ref: "1378"                 # attach under ANOTHER component in
+                                              # this worksheet (by its serial_number
+                                              # or ref) instead of the glider —
+                                              # e.g. a CT sensor's parent is the
+                                              # payload bay, not the glider itself.
 
 Behavior, by design:
 - serial_number is the primary lookup key, except for slocum_aft_section
@@ -35,6 +44,15 @@ Behavior, by design:
   (aft_section_assy / aft_end_cap_assy) — see ASSEMBLY_NUMBER_LOOKUP.
   The worksheet field name doesn't change; the lookup just knows where
   to look per type.
+- Components attach directly to the glider unless they set parent_ref,
+  in which case they attach to whichever other component in the same
+  worksheet has that serial_number/ref — this is what lets a sensor
+  nest under a payload bay instead of flattening straight onto the
+  glider (the schema's own composition model is recursive; the
+  worksheet needs to be able to express that too). Resolution is two
+  passes: every component's own asset is resolved/created first, then
+  parent_refs are looked up against that resolved set, so order in the
+  worksheet doesn't matter.
 - Never silently overwrites a non-null value already in the database.
   If a worksheet field conflicts with what's already there, it's a
   warning, not a write — same "don't guess" rule as the earlier
@@ -103,6 +121,11 @@ ASSEMBLY_NUMBER_LOOKUP = {
     "slocum_aft_section": ("asset_slocum_aft_section_details", "aft_section_assy"),
     "slocum_end_cap": ("asset_slocum_end_cap_details", "aft_end_cap_assy"),
 }
+
+
+def component_ref(component):
+    """The key other components use to point at this one via parent_ref."""
+    return str(component.get("ref") or component.get("serial_number") or component.get("asset_id"))
 
 
 def get_asset_type_id(cur, name):
@@ -258,11 +281,11 @@ def sync_cal(cur, commit, asset_type, asset_id, component, report, warnings):
         report.append(f"    cal: would add new row to {table} ({cal_fields[date_col]}) (dry run)")
 
 
-def check_open_elsewhere(cur, asset_id, glider_asset_id, warnings):
+def check_open_elsewhere(cur, asset_id, parent_asset_id, warnings):
     cur.execute(
         "SELECT id, parent_asset_id FROM asset_assignments "
         "WHERE child_asset_id = %s AND end_date IS NULL AND parent_asset_id IS DISTINCT FROM %s",
-        (asset_id, glider_asset_id),
+        (asset_id, parent_asset_id),
     )
     for row in cur.fetchall():
         warnings.append(
@@ -271,60 +294,42 @@ def check_open_elsewhere(cur, asset_id, glider_asset_id, warnings):
         )
 
 
-def sync_assignment(cur, commit, asset_id, glider_asset_id, component, glider_purchase_date, report, warnings):
+def sync_assignment(cur, commit, asset_id, parent_asset_id, component, glider_purchase_date, report, warnings):
     start_date = component.get("start_date", glider_purchase_date)
     position = component.get("position")
     notes = component.get("notes")
 
     cur.execute(
         "SELECT id FROM asset_assignments WHERE child_asset_id = %s AND parent_asset_id = %s AND start_date = %s",
-        (asset_id, glider_asset_id, start_date),
+        (asset_id, parent_asset_id, start_date),
     )
     if cur.fetchone():
-        report.append(f"    assignment: already present (child={asset_id} parent={glider_asset_id} start={start_date}) — skipped")
+        report.append(f"    assignment: already present (child={asset_id} parent={parent_asset_id} start={start_date}) — skipped")
         return
 
     if commit:
         cur.execute(
             "INSERT INTO asset_assignments (child_asset_id, parent_asset_id, start_date, position, notes) "
             "VALUES (%s, %s, %s, %s, %s)",
-            (asset_id, glider_asset_id, start_date, position, notes),
+            (asset_id, parent_asset_id, start_date, position, notes),
         )
-        report.append(f"    assignment: NEW  child={asset_id} -> parent={glider_asset_id}  start={start_date}  position={position}")
+        report.append(f"    assignment: NEW  child={asset_id} -> parent={parent_asset_id}  start={start_date}  position={position}")
     else:
-        report.append(f"    assignment: would create  child={asset_id} -> parent={glider_asset_id}  start={start_date}  position={position} (dry run)")
+        report.append(f"    assignment: would create  child={asset_id} -> parent={parent_asset_id}  start={start_date}  position={position} (dry run)")
 
 
-def process_component(cur, commit, glider_asset_id, glider_purchase_date, component, index, total, report, warnings):
+def resolve_own_asset(cur, commit, component, warnings):
+    """Phase 1: resolve or create this component's own asset, independent
+    of who its parent is. Returns (asset_id_or_None, status)."""
     asset_type = component["asset_type"]
-    label = component.get("serial_number", component.get("asset_id", "?"))
-    header = f"[{index}/{total}] {asset_type}  serial={label}"
-    report.append(header)
-
     asset_type_id = get_asset_type_id(cur, asset_type)
     existing = find_asset(cur, asset_type, asset_type_id, component)
-
-    if existing is None:
-        if not component.get("create"):
-            warnings.append(
-                f"{header.strip()}: no matching asset found and 'create' not set — skipped entirely"
-            )
-            report.append("    SKIPPED — asset not found, 'create' not set")
-            return
-        asset_id = create_asset(cur, commit, asset_type_id, component, warnings)
-        if commit:
-            report.append(f"    asset: NEW id={asset_id}")
-        else:
-            report.append("    asset: would create new asset (dry run)")
-            return  # no real id yet in dry-run — can't chase FKs further
-    else:
-        asset_id = existing["id"]
-        report.append(f"    asset: id={asset_id} (existing)")
-
-    sync_detail(cur, commit, asset_type, asset_id, component, report, warnings)
-    sync_cal(cur, commit, asset_type, asset_id, component, report, warnings)
-    check_open_elsewhere(cur, asset_id, glider_asset_id, warnings)
-    sync_assignment(cur, commit, asset_id, glider_asset_id, component, glider_purchase_date, report, warnings)
+    if existing is not None:
+        return existing["id"], "existing"
+    if not component.get("create"):
+        return None, "not_found"
+    asset_id = create_asset(cur, commit, asset_type_id, component, warnings)
+    return (asset_id, "created") if commit else (None, "would_create")
 
 
 def main():
@@ -346,15 +351,68 @@ def main():
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             glider_asset_id = resolve_glider(cur, worksheet["glider"])
             glider_purchase_date = worksheet["glider"].get("purchase_date")
-
             components = worksheet.get("components", [])
-            report = []
             warnings = []
+
+            # Phase 1: resolve/create every component's own asset first, so
+            # parent_ref can point at any other component regardless of
+            # worksheet order.
+            resolved = {}
+            asset_statuses = {}
+            for component in components:
+                ref = component_ref(component)
+                asset_id, status = resolve_own_asset(cur, args.commit, component, warnings)
+                resolved[ref] = asset_id
+                asset_statuses[ref] = (component["asset_type"], status)
+
+            # Phase 2: detail/cal/assignment sync, now that every ref that
+            # can be resolved has been.
+            report = []
             for i, component in enumerate(components, start=1):
-                process_component(
-                    cur, args.commit, glider_asset_id, glider_purchase_date,
-                    component, i, len(components), report, warnings,
-                )
+                ref = component_ref(component)
+                asset_type, status = asset_statuses[ref]
+                asset_id = resolved[ref]
+                header = f"[{i}/{len(components)}] {asset_type}  serial={ref}"
+                report.append(header)
+
+                if status == "not_found":
+                    warnings.append(f"{header}: no matching asset found and 'create' not set — skipped entirely")
+                    report.append("    SKIPPED — asset not found, 'create' not set")
+                    continue
+                if status == "would_create":
+                    report.append("    asset: would create new asset (dry run)")
+                    continue  # no real id yet — can't chase FKs further
+                report.append(f"    asset: id={asset_id} ({'NEW' if status == 'created' else 'existing'})")
+
+                parent_ref = component.get("parent_ref")
+                if parent_ref is not None:
+                    parent_ref = str(parent_ref)
+                    if parent_ref not in resolved:
+                        warnings.append(
+                            f"{header}: parent_ref '{parent_ref}' does not match any component in this worksheet"
+                        )
+                        report.append(f"    assignment: SKIPPED — parent_ref '{parent_ref}' not found in worksheet")
+                        sync_detail(cur, args.commit, asset_type, asset_id, component, report, warnings)
+                        sync_cal(cur, args.commit, asset_type, asset_id, component, report, warnings)
+                        continue
+                    parent_asset_id = resolved[parent_ref]
+                    if parent_asset_id is None:
+                        warnings.append(
+                            f"{header}: parent_ref '{parent_ref}' has no resolved asset id yet "
+                            f"(not found, or would-create in this dry run) — assignment skipped"
+                        )
+                        report.append(f"    assignment: SKIPPED — parent '{parent_ref}' not resolved")
+                        sync_detail(cur, args.commit, asset_type, asset_id, component, report, warnings)
+                        sync_cal(cur, args.commit, asset_type, asset_id, component, report, warnings)
+                        continue
+                    report.append(f"    parent: {parent_ref} (asset {parent_asset_id})")
+                else:
+                    parent_asset_id = glider_asset_id
+
+                sync_detail(cur, args.commit, asset_type, asset_id, component, report, warnings)
+                sync_cal(cur, args.commit, asset_type, asset_id, component, report, warnings)
+                check_open_elsewhere(cur, asset_id, parent_asset_id, warnings)
+                sync_assignment(cur, args.commit, asset_id, parent_asset_id, component, glider_purchase_date, report, warnings)
 
             print(f"\nGlider asset_id={glider_asset_id} — {len(components)} component(s)\n")
             print("\n".join(report))
