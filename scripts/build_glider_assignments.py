@@ -27,6 +27,14 @@ Worksheet shape (see scripts/glider_builds/durin.yaml for a real example):
         # cal: {service_date: "2020-08-14", pump_type: "hd pump"}  # NEW cal row
 
 Behavior, by design:
+- serial_number is the primary lookup key, except for slocum_aft_section
+  and slocum_end_cap: the legacy schema never gave those a real serial
+  number (assets.serial_number is blank for every row of both types in
+  the Phase 1 backfill), so 'serial_number' in the worksheet is matched
+  against the assembly number on the detail table instead
+  (aft_section_assy / aft_end_cap_assy) — see ASSEMBLY_NUMBER_LOOKUP.
+  The worksheet field name doesn't change; the lookup just knows where
+  to look per type.
 - Never silently overwrites a non-null value already in the database.
   If a worksheet field conflicts with what's already there, it's a
   warning, not a write — same "don't guess" rule as the earlier
@@ -84,6 +92,18 @@ CAL_TABLES = {
     "slocum_forward_section": ("asset_slocum_forward_section_cal", "service_date"),
 }
 
+# These two types never had a generic serial number in the legacy schema
+# (Phase 1 left assets.serial_number blank for every row) — the number
+# Fiona actually identifies them by is an assembly number living on the
+# detail table instead. asset_types.name -> (detail table, assembly column).
+# `component.serial_number` in the worksheet is matched against this
+# column for these types, falling back transparently — the worksheet
+# shape stays the same either way.
+ASSEMBLY_NUMBER_LOOKUP = {
+    "slocum_aft_section": ("asset_slocum_aft_section_details", "aft_section_assy"),
+    "slocum_end_cap": ("asset_slocum_end_cap_details", "aft_end_cap_assy"),
+}
+
 
 def get_asset_type_id(cur, name):
     cur.execute("SELECT id FROM asset_types WHERE name = %s", (name,))
@@ -106,17 +126,31 @@ def resolve_glider(cur, glider_cfg):
     return row["asset_id"]
 
 
-def find_asset(cur, asset_type_id, component):
+def find_asset(cur, asset_type, asset_type_id, component):
     if "asset_id" in component:
         cur.execute(
             "SELECT id, serial_number FROM assets WHERE id = %s AND asset_type_id = %s",
             (component["asset_id"], asset_type_id),
         )
-    else:
-        cur.execute(
-            "SELECT id, serial_number FROM assets WHERE serial_number = %s AND asset_type_id = %s",
-            (component["serial_number"], asset_type_id),
-        )
+        return cur.fetchone()
+
+    cur.execute(
+        "SELECT id, serial_number FROM assets WHERE serial_number = %s AND asset_type_id = %s",
+        (component["serial_number"], asset_type_id),
+    )
+    row = cur.fetchone()
+    if row is not None:
+        return row
+
+    assembly = ASSEMBLY_NUMBER_LOOKUP.get(asset_type)
+    if assembly is None:
+        return None
+    table, column = assembly
+    cur.execute(
+        f"SELECT a.id, a.serial_number FROM assets a JOIN {table} d ON d.asset_id = a.id "
+        f"WHERE a.asset_type_id = %s AND d.{column}::text = %s",
+        (asset_type_id, str(component["serial_number"])),
+    )
     return cur.fetchone()
 
 
@@ -268,7 +302,7 @@ def process_component(cur, commit, glider_asset_id, glider_purchase_date, compon
     report.append(header)
 
     asset_type_id = get_asset_type_id(cur, asset_type)
-    existing = find_asset(cur, asset_type_id, component)
+    existing = find_asset(cur, asset_type, asset_type_id, component)
 
     if existing is None:
         if not component.get("create"):
