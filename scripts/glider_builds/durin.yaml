@@ -1,0 +1,57 @@
+# Durin's initial (purchase-time) build, from Fiona's primary-source notes.
+# Run with:
+#   DATABASE_URL=postgresql://... python scripts/build_glider_assignments.py scripts/glider_builds/durin.yaml
+#   DATABASE_URL=postgresql://... python scripts/build_glider_assignments.py scripts/glider_builds/durin.yaml --commit
+#
+# NOTE: assets.purchase_date for Durin (asset_id=11) is currently 2020-08-17
+# in the DB, but the forward-section assignment already entered (id=173)
+# used 2020-08-14. Pick whichever is actually correct and set it below —
+# every component's start_date defaults to this value unless overridden.
+
+glider:
+  asset_id: 11
+  purchase_date: "2020-08-14"
+
+components:
+  # Worked example — already entered manually as assignment id=173.
+  # Re-running this worksheet will report it as "already present" and
+  # skip it, not duplicate it.
+  - asset_type: slocum_forward_section
+    serial_number: "560"
+    notes: "Initial purchase-time forward section"
+
+  # Add the rest of Durin's initial components below, one per physical
+  # part. Copy/adjust this template — delete fields you don't need.
+  #
+  # - asset_type: slocum_aft_section
+  #   serial_number: "..."
+  #
+  # - asset_type: slocum_end_cap
+  #   serial_number: "..."
+  #
+  # - asset_type: slocum_altimeter
+  #   serial_number: "..."
+  #
+  # - asset_type: slocum_hull
+  #   serial_number: "..."
+  #   position: aft            # or fore / energy — hulls need a position
+  #
+  # - asset_type: battery
+  #   serial_number: "..."
+  #   position: pitch          # pitch / extended / aft
+  #
+  # - asset_type: ct_sensor
+  #   serial_number: "..."
+  #
+  # - asset_type: slocum_payload_bay
+  #   serial_number: "..."
+  #
+  # If a component genuinely isn't in OGDB yet at all (no legacy backfill
+  # row), add `create: true` and whatever detail fields you know:
+  #
+  # - asset_type: slocum_hull
+  #   serial_number: "NEW-001"
+  #   position: fore
+  #   create: true
+  #   detail:
+  #     hull_model_id: 1
