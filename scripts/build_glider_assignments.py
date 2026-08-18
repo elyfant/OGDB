@@ -86,11 +86,10 @@ import yaml
 
 # asset_types.name -> detail table name. Types with no distinguishing
 # attributes beyond the generic assets columns have no entry here
-# (slocum_thruster, argos_tag, nose_cone). slocum_altimeter and
-# slocum_energy_bay used to be in that no-detail-table list too, until
-# xxxx_add_structural_part_models gave every structural type a `model`
-# column (2026-08-18) -- these two got a minimal detail table
-# (asset_id + model only) created for exactly that column.
+# (argos_tag, nose_cone). slocum_altimeter, slocum_energy_bay, and
+# slocum_thruster used to be in that no-detail-table list too, until
+# xxxx_add_structural_part_models / xxxx_add_thruster_model gave them a
+# minimal detail table (asset_id + model only) for a flat `model` field.
 DETAIL_TABLES = {
     "glider": "asset_glider_details",
     "slocum_aft_section": "asset_slocum_aft_section_details",
@@ -100,6 +99,7 @@ DETAIL_TABLES = {
     "slocum_hull": "asset_slocum_hull_details",
     "slocum_altimeter": "asset_slocum_altimeter_details",
     "slocum_energy_bay": "asset_slocum_energy_bay_details",
+    "slocum_thruster": "asset_slocum_thruster_details",
     "battery": "asset_battery_details",
     "ct_sensor": "asset_sensor_details",
     "do_sensor": "asset_sensor_details",
