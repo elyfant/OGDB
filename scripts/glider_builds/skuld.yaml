@@ -1,0 +1,76 @@
+# Skuld's initial (purchase-time) build, from Fiona's primary-source notes.
+# Copied from durin.yaml's structure (asset_types/positions) once that one
+# was worked through end-to-end -- serial numbers cleared below for
+# filling in from Skuld's own records.
+# Run with:
+#   DATABASE_URL=postgresql://... python scripts/build_glider_assignments.py scripts/glider_builds/skuld.yaml
+#   DATABASE_URL=postgresql://... python scripts/build_glider_assignments.py scripts/glider_builds/skuld.yaml --commit
+#
+# NOTE: assets.purchase_date for Skuld (asset_id=15) is currently
+# 2020-10-15 in the DB -- confirm this is the right start_date before
+# running (Durin's DB value turned out to be 3 days off from the real
+# date). Every component's start_date defaults to this value unless
+# overridden per-component.
+
+glider:
+  asset_id: 15
+  purchase_date: "2020-10-15"
+
+components:
+  - asset_type: slocum_forward_section
+    serial_number: ""
+
+  - asset_type: slocum_aft_section
+    serial_number: ""    # this is the aft_section_assy number, not a serial number
+
+  - asset_type: slocum_energy_bay
+    serial_number: ""
+    create: true
+
+  - asset_type: slocum_end_cap
+    serial_number: ""    # this is the aft_end_cap_assy number, not a serial number
+
+  - asset_type: slocum_altimeter
+    serial_number: ""
+
+  - asset_type: slocum_hull
+    serial_number: ""
+    position: aft            # fore / aft / energy — hulls need a position
+    create: true
+    # detail: {hull_model_id: ...}   # add once you have the length/part-number lookup
+
+  - asset_type: slocum_hull
+    serial_number: ""
+    position: fore
+    create: true
+    # detail: {hull_model_id: ...}
+
+  - asset_type: slocum_hull
+    serial_number: ""
+    position: energy
+    create: true
+    # detail: {hull_model_id: ...}
+
+  - asset_type: battery
+    serial_number: ""
+    position: pitch          # confirm slot names against your notes -- Durin used pitch/aft/energy
+
+  - asset_type: battery
+    serial_number: ""
+    position: aft
+
+  - asset_type: battery
+    serial_number: ""
+    position: energy
+
+  - asset_type: slocum_payload_bay
+    serial_number: ""
+    ref: payload_bay          # stable label for parent_ref below, independent of serial_number
+
+  - asset_type: ct_sensor
+    serial_number: ""
+    parent_ref: payload_bay    # attaches to the payload bay above, not the glider directly
+
+  # Add any other sensors (do_sensor, eco_sensor, mr_sensor, argos_tag,
+  # slocum_thruster, ...) Skuld actually carries -- this list is only
+  # what Durin turned out to have, not a fixed template for every glider.
