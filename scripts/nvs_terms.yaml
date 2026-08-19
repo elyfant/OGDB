@@ -8,11 +8,20 @@
 # needed for a real sensor in the fleet.
 #
 # Currently wired into the schema: L05 (sensor_family) and L22 (model)
-# on asset_sensor_details. platforms/L06/B76 are a deferred follow-up —
-# see design-notes.md.
+# on asset_sensor_details; P01 (measured parameter) on
+# asset_sensor_parameters, many-to-many since one sensor outputs several
+# parameters. platforms/L06/B76 are a deferred follow-up — see
+# design-notes.md.
 #
 # Format:
 # - uri: http://vocab.nerc.ac.uk/collection/L22/current/TOOL0942/
 #   note: why this term is here (which equipment it matches)
 
-[]
+- uri: http://vocab.nerc.ac.uk/collection/P01/current/TEMPPR01/
+  note: Measured parameter for every ct_sensor (temperature channel)
+- uri: http://vocab.nerc.ac.uk/collection/P01/current/CNDCST01/
+  note: Measured parameter for every ct_sensor (conductivity channel)
+- uri: http://vocab.nerc.ac.uk/collection/P01/current/DOXYZZ01/
+  note: Measured parameter for every do_sensor
+- uri: http://vocab.nerc.ac.uk/collection/P01/current/CPHLPR01/
+  note: Measured parameter for every eco_sensor (chlorophyll fluorescence -- all three ECO models in the fleet are fluorometers, kept to this one parameter for now rather than mapping turbidity/backscatter separately per model)

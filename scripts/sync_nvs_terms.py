@@ -26,10 +26,11 @@ import yaml
 MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "nvs_terms.yaml")
 NVS_ACCEPT_HEADER = "application/ld+json"
 
-# Collections currently wired into the schema (asset_sensor_details).
-# Not a hard validation — just a heads-up if the manifest drifts ahead
-# of what the schema actually uses (e.g. platforms/L06/B76, deferred).
-KNOWN_COLLECTIONS = {"L05", "L22"}
+# Collections currently wired into the schema (asset_sensor_details,
+# asset_sensor_parameters). Not a hard validation — just a heads-up if
+# the manifest drifts ahead of what the schema actually uses (e.g.
+# platforms/L06/B76, deferred).
+KNOWN_COLLECTIONS = {"L05", "L22", "P01"}
 
 
 def fetch_term(uri: str) -> dict:
