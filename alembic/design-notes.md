@@ -781,6 +781,38 @@ This OGDB repo had no prior commit history before this project started —
 production schema evolution was never version-controlled. Not something to
 fix today, just worth tracking separately.
 
+## asset_service_events gets a span + person (2026-08-23)
+
+`xxxx_asset_service_events_span_and_person.py` — renamed `event_date` to
+`start_date`, added nullable `end_date`, `title` (varchar 200), and
+`performed_by_contact_id` (FK -> contacts.id, not users.id — matches the
+existing "who did this" convention of missions.principal_investigator_id/
+technical_lead_id and dataset_processing_stages.who_id; `users` would
+wrongly exclude a factory technician with no OGDB login from being
+recorded as who performed a factory_repair event). Driven by the
+OGDB-portal "Asset Timeline" work: a new UI lets a pilot/lab log a
+servicing event (factory servicing, transit, or lab servicing) that can
+still be in progress — "has a start_date but no end_date" is the
+open/in-progress signal, and the UI blocks logging a new event for an
+asset until its open one is closed. The existing event types
+(calibration, etc.) are all instantaneous, so their rows just get
+`end_date = null` going forward, which is correct rather than a gap.
+`xxxx_seed_transit_service_event_type.py` adds the missing 'transit' type
+the same UI needs (kept as its own migration, same reasoning as
+`xxxx_seed_more_service_event_types.py` — `xxxx_seed_asset_service_event_types.py`
+already has 75 real rows sitting on top of it on ogdb-test).
+
+Checked first: no view depends on `asset_service_events` (pg_depend on
+ogdb-test came back empty), so the rename needed no view-recreation dance
+like the CT-cal SBE rename did. Tested upgrade -> downgrade -> upgrade on
+ogdb-test: all 75 existing rows kept their (renamed) start_date, both new
+FKs and the audit trigger came back intact, downgrade restored the exact
+original column set with no data loss.
+
+Not yet done: the OGDB-portal gateway module (controller/service/DTOs)
+that actually writes to these new columns — schema lands first, gateway
+work follows on top of it.
+
 ## How I (Fiona) like to work — see also `~/.claude/CLAUDE.md`
 
 Explain reasoning, not just implementation. For architecture decisions, give
