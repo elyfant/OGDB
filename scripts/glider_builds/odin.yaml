@@ -25,60 +25,53 @@ glider:
   purchase_date: "2019-05-15"
 
 components:
-  - asset_type: slocum_forward_section
-    serial_number: ""
+   - asset_type: slocum_forward_section
+     serial_number: "475"
+     notes: "Initial purchase-time forward section"
+     detail: {model: "ASSY 305685-1000"}  # forward section
 
-  - asset_type: slocum_aft_section
-    serial_number: ""    # this is the aft_section_assy number, not a serial number
 
-  - asset_type: slocum_energy_bay
-    serial_number: ""
-    create: true
+  # Add the rest of Durin's initial components below, one per physical
+  # part. Copy/adjust this template — delete fields you don't need.
+  #
+   - asset_type: "slocum_aft_section"
+     serial_number: "138"
+     detail: {model: "ASSY 305656"}
+     create: true
 
-  - asset_type: slocum_end_cap
-    serial_number: ""    # this is the aft_end_cap_assy number, not a serial number
 
-  - asset_type: slocum_altimeter
-    serial_number: ""
+   - asset_type: slocum_end_cap
+     serial_number: "135"
+     detail: {model: "ASSY 305654"}    # end cap
 
-  - asset_type: slocum_hull
-    serial_number: ""
-    position: aft            # fore / aft / energy — hulls need a position
-    create: true
-    # detail: {hull_model_id: ...}   # add once you have the length/part-number lookup
+   - asset_type: slocum_altimeter
+     serial_number: "4300645"
+     detail: {model: "G-1414"}           # altimeter
 
-  - asset_type: slocum_hull
-    serial_number: ""
-    position: fore
-    create: true
-    # detail: {hull_model_id: ...}
+   - asset_type: slocum_hull
+     serial_number: "2101"
+     position: aft            # or fore / energy — hulls need a position
+     detail: {hull_model_id: "1"}   # add once you have the length/part-number lookup
+     create: true
 
-  - asset_type: slocum_hull
-    serial_number: ""
-    position: energy
-    create: true
-    # detail: {hull_model_id: ...}
+   - asset_type: slocum_hull
+     serial_number: "2126"
+     position: fore            # or fore / energy — hulls need a position
+     detail: {hull_model_id: "1"}   # add once you have the length/part-number lookup
+     create: true
 
-  - asset_type: battery
-    serial_number: ""
-    position: pitch          # confirm slot names against your notes -- Durin used pitch/aft/energy
+   - asset_type: battery
+     serial_number: "1900105"
+     position: pitch          # pitch / extended / aft
 
-  - asset_type: battery
-    serial_number: ""
-    position: aft
+   - asset_type: battery
+     serial_number: "1900044"
+     position: aft          # pitch / extended / aft
 
-  - asset_type: battery
-    serial_number: ""
-    position: energy
+   - asset_type: ct_sensor
+     serial_number: "9545"
+     parent_ref: "1316"    # attaches to the payload bay below, not Durin directly
 
-  - asset_type: slocum_payload_bay
-    serial_number: ""
-    ref: payload_bay          # stable label for parent_ref below, independent of serial_number
-
-  - asset_type: ct_sensor
-    serial_number: ""
-    parent_ref: payload_bay    # attaches to the payload bay above, not the glider directly
-
-  # Add any other sensors (do_sensor, eco_sensor, mr_sensor, argos_tag,
-  # slocum_thruster, ...) Odin actually carries -- this list is only
-  # what Durin turned out to have, not a fixed template for every glider.
+   - asset_type: slocum_payload_bay
+     serial_number: "1316"
+     detail: {model: "A311321-NFC"}    # payload bay
