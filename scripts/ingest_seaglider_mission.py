@@ -14,9 +14,14 @@ is used here to sanity-check the pairing.
 
 What it does
 ------------
-input: mission_number (int, positional), filename (positional)
+input: mission_name (positional)
 
-1. Reads mission metadata from the file:
+1. Connects to OGDB (DATABASE_URL) and looks the mission up by mission_name
+   (case-insensitive; must match exactly one row -- this script never inserts
+   a mission). Reads `missions.l2_file` from that row: a path to the mission's
+   current best L2 dataset NetCDF. That file is the input -- it is not passed
+   on the command line.
+2. Reads mission metadata from the file:
        launch_date / launch_latitude / launch_longitude   (start of first dive)
        end_date_science / recovery_date                    (end of last profile)
        recovery_latitude / recovery_longitude              (end of last profile)
@@ -24,35 +29,23 @@ input: mission_number (int, positional), filename (positional)
        distance_km                                         (great-circle sum
                                                             along the surface track)
        updated_at                                          (set to now() by the DB)
-       l1_file                                             (see note below)
-2. Builds the surface track: for every dive, the *first* sample of that dive's
+3. Builds the surface track: for every dive, the *first* sample of that dive's
    down cast -> latitude, longitude, utc, temperature, salinity, dacu, dacv.
    (temperature/salinity = shallowest finite depth bin of that profile.)
    A final row is appended for the glider's last surfacing so the mapped track
    reaches the recovery position.
-3. Connects to OGDB (DATABASE_URL), looks the mission up by mission_number
-   (must match exactly one row -- this script never inserts a mission), then:
-       - UPDATE missions  SET <the metadata columns above>
-       - UPSERT tracks    (one row per surface fix; ON CONFLICT (missions_id, utc))
-   All in one transaction. Dry-run by default; --commit to write.
-
-Note on `l1_file` / `l2_file`
-----------------------------
-`missions.l1_file` / `missions.l2_file` (text) are free-text pointers to the
-current best dataset for the mission at each processing level. This script
-sets `l1_file` to the absolute path of the NetCDF it just ingested (override
-with --l1-file), and leaves `l2_file` untouched unless --l2-file is given.
+4. Overwrites the mission's metadata columns above and UPSERTs its surface
+   track (ON CONFLICT (missions_id, utc)), all in one transaction. `l1_file`
+   and `l2_file` are not touched -- l2_file is the input. Dry-run by default;
+   --commit to write.
 
 Usage
 -----
-    # parse only, no database:
-    python scripts/ingest_seaglider_mission.py --dump 42 /path/to/sgNNN_..._profile.nc
-
-    # dry run against the DB (looks up the mission, prints the diff, writes nothing):
-    DATABASE_URL=postgresql://... python scripts/ingest_seaglider_mission.py 42 /path/to/file.nc
+    # dry run: resolve the mission, read its l2_file, print the diff, write nothing
+    DATABASE_URL=postgresql://... python scripts/ingest_seaglider_mission.py naco_svinoy_2013_1
 
     # for real:
-    DATABASE_URL=postgresql://... python scripts/ingest_seaglider_mission.py --commit 42 /path/to/file.nc
+    DATABASE_URL=postgresql://... python scripts/ingest_seaglider_mission.py --commit naco_svinoy_2013_1
 """
 import argparse
 import math
@@ -221,9 +214,8 @@ def read_mission_netcdf(path):
 # Database
 # ---------------------------------------------------------------------
 
-# Ordered for the UPDATE and the summary print. A column is only written if
-# read_mission_netcdf/main actually put a value in the metadata dict for it
-# (l2_file is skipped unless --l2-file is passed).
+# The metadata columns this script computes from the NetCDF and overwrites,
+# ordered for the UPDATE and the summary print.
 MISSION_METADATA_COLUMNS = [
     "launch_date",
     "launch_latitude",
@@ -234,29 +226,29 @@ MISSION_METADATA_COLUMNS = [
     "recovery_longitude",
     "dives",
     "distance_km",
-    "l1_file",
-    "l2_file",
 ]
 
 
-def resolve_mission_id(cur, mission_number):
+def resolve_mission(cur, mission_name):
+    """Look the mission up by name (case-insensitive, matching the
+    UNIQUE (lower(mission_name)) constraint). Returns (id, name, l2_file)."""
     cur.execute(
-        "SELECT id, mission_name FROM missions WHERE mission_number = %s",
-        (mission_number,),
+        "SELECT id, mission_name, l2_file FROM missions "
+        "WHERE lower(mission_name) = lower(%s)",
+        (mission_name,),
     )
     rows = cur.fetchall()
     if not rows:
-        sys.exit(f"No mission with mission_number = {mission_number}. This script never inserts missions.")
+        sys.exit(f"No mission with mission_name = {mission_name!r}. This script never inserts missions.")
     if len(rows) > 1:
         ids = ", ".join(str(r["id"]) for r in rows)
-        sys.exit(f"{len(rows)} missions have mission_number = {mission_number} (ids: {ids}). Refusing to guess.")
-    return rows[0]["id"], rows[0]["mission_name"]
+        sys.exit(f"{len(rows)} missions match mission_name = {mission_name!r} (ids: {ids}). Refusing to guess.")
+    return rows[0]["id"], rows[0]["mission_name"], rows[0]["l2_file"]
 
 
 def update_mission(cur, mission_id, metadata):
-    cols = [c for c in MISSION_METADATA_COLUMNS if c in metadata]
-    set_clause = ", ".join(f"{c} = %({c})s" for c in cols)
-    params = {c: metadata[c] for c in cols}
+    set_clause = ", ".join(f"{c} = %({c})s" for c in MISSION_METADATA_COLUMNS)
+    params = {c: metadata[c] for c in MISSION_METADATA_COLUMNS}
     params["id"] = mission_id
     cur.execute(
         f"UPDATE missions SET {set_clause}, updated_at = now() WHERE id = %(id)s",
@@ -306,10 +298,10 @@ def upsert_tracks(cur, mission_id, track):
 # Reporting
 # ---------------------------------------------------------------------
 
-def print_summary(mission_number, path, metadata, track, warnings):
+def print_summary(mission_name, path, metadata, track, warnings):
     print("=" * 70)
-    print(f"Seaglider mission ingest  --  mission_number {mission_number}")
-    print(f"file: {path}")
+    print(f"Seaglider mission ingest  --  mission_name {mission_name!r}")
+    print(f"l2_file: {path}")
     print("=" * 70)
     print("mission metadata:")
     for k in MISSION_METADATA_COLUMNS:
@@ -335,37 +327,16 @@ def main():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("mission_number", type=int, help="OGDB missions.mission_number")
-    parser.add_argument("filename", help="path to the Seaglider mission NetCDF")
+    parser.add_argument(
+        "mission_name",
+        help="OGDB missions.mission_name (case-insensitive; its l2_file is the NetCDF to ingest)",
+    )
     parser.add_argument("--commit", action="store_true", help="write to the DB (default: dry run)")
-    parser.add_argument("--dump", action="store_true", help="parse and print only; no DB connection")
-    parser.add_argument(
-        "--l1-file",
-        help="value for missions.l1_file (default: absolute path of the NetCDF)",
-    )
-    parser.add_argument(
-        "--l2-file",
-        help="value for missions.l2_file (default: left unchanged)",
-    )
     args = parser.parse_args()
-
-    if not os.path.isfile(args.filename):
-        sys.exit(f"File not found: {args.filename}")
-
-    metadata, track, warnings = read_mission_netcdf(args.filename)
-    metadata["l1_file"] = args.l1_file or os.path.abspath(args.filename)
-    if args.l2_file:
-        metadata["l2_file"] = args.l2_file
-
-    print_summary(args.mission_number, args.filename, metadata, track, warnings)
-
-    if args.dump:
-        print("--dump: no database changes.")
-        return
 
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
-        sys.exit("DATABASE_URL environment variable not set (use --dump to parse without a DB)")
+        sys.exit("DATABASE_URL environment variable not set")
 
     import psycopg2
     import psycopg2.extras
@@ -374,8 +345,17 @@ def main():
     conn.autocommit = False
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            mission_id, mission_name = resolve_mission_id(cur, args.mission_number)
+            mission_id, mission_name, l2_file = resolve_mission(cur, args.mission_name)
             print(f"matched mission id={mission_id}  name={mission_name!r}")
+
+            if not l2_file or not l2_file.strip():
+                sys.exit(f"Mission {mission_name!r} has no l2_file set -- nothing to ingest.")
+            l2_file = l2_file.strip()
+            if not os.path.isfile(l2_file):
+                sys.exit(f"l2_file for {mission_name!r} does not exist on disk: {l2_file}")
+
+            metadata, track, warnings = read_mission_netcdf(l2_file)
+            print_summary(mission_name, l2_file, metadata, track, warnings)
 
             updated = update_mission(cur, mission_id, metadata)
             n_tracks = upsert_tracks(cur, mission_id, track)
