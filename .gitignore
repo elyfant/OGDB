@@ -17,6 +17,10 @@ env/
 .vscode/
 .idea/
 
+# Machine-local symlinks to sibling projects (absolute paths, won't resolve
+# on another machine/checkout) — see README.md "Cross-project context".
+.claude/rules/
+
 # Jupyter
 .ipynb_checkpoints/
 
