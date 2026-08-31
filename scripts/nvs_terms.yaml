@@ -25,3 +25,17 @@
   note: Measured parameter for every do_sensor
 - uri: http://vocab.nerc.ac.uk/collection/P01/current/CPHLPR01/
   note: Measured parameter for every eco_sensor (chlorophyll fluorescence -- all three ECO models in the fleet are fluorometers, kept to this one parameter for now rather than mapping turbidity/backscatter separately per model)
+- uri: http://vocab.nerc.ac.uk/collection/L22/current/TOOL0669/
+  note: >-
+    Sea-Bird SBE 41CP CTD -- best-fit match for the CT sensor on early
+    (pre-GPCTD) Slocum gliders. Sea-Bird's own production records
+    (service reports, temp/cond/pressure calibration certs) for these
+    units never print a standard model name -- every report is
+    white-labeled "Model Number: WEBB Glider" / "WEBB Glider
+    Calibration Data" throughout, a custom OEM template built for
+    Webb Research rather than a catalog part. TOOL0669 is inferred
+    from sensor era and the pumped/self-contained design (matches the
+    Argo-float-family conductivity formula in the certs), not from a
+    cross-reference in the vendor paperwork itself -- record any
+    asset using this term with a note flagging it as inferred, not
+    vendor-confirmed.
