@@ -2,3 +2,5 @@
 jupyter
 ipykernel
 netCDF4
+alembic
+SQLAlchemy
