@@ -2,5 +2,8 @@
 jupyter
 ipykernel
 netCDF4
-alembic
-SQLAlchemy
+# Pinned to the 1.x line -- env.py and the existing migrations target the
+# SQLAlchemy 1.4 API; 2.0 has breaking changes that aren't worth chasing
+# for a migrations-only dependency.
+alembic>=1.13,<1.14
+SQLAlchemy>=1.4,<2.0
