@@ -53,6 +53,13 @@ Behavior, by design:
   passes: every component's own asset is resolved/created first, then
   parent_refs are looked up against that resolved set, so order in the
   worksheet doesn't matter.
+- The `slocum_aft_section` entry is special: a Slocum glider's aft
+  section IS its identity, so it's written as a 1:1 link
+  (asset_slocum_aft_section_details.glider_asset_id), NOT an
+  asset_assignments row (see xxxx_glider_core_aft_section). Its
+  parent_ref, position and start_date are ignored. `slocum_end_cap`
+  now attaches to the glider like any other component (it used to
+  nest under the aft section).
 - Never silently overwrites a non-null value already in the database.
   If a worksheet field conflicts with what's already there, it's a
   warning, not a write — same "don't guess" rule as the earlier
@@ -300,6 +307,60 @@ def check_open_elsewhere(cur, asset_id, parent_asset_id, warnings):
         )
 
 
+def sync_core_aft_section(cur, commit, asset_id, glider_asset_id, component, report, warnings):
+    """A Slocum glider's aft section is its identity, not a swappable
+    component -- it's a 1:1 link on asset_slocum_aft_section_details
+    (glider_asset_id), not an asset_assignments row (see
+    xxxx_glider_core_aft_section). Same "never silently overwrite" rule
+    as everything else here: a conflicting existing value is a warning,
+    not a write.
+    """
+    if component.get("parent_ref") is not None:
+        warnings.append(
+            f"aft section (asset {asset_id}): parent_ref is ignored -- an aft "
+            f"section binds only to its glider, via glider_asset_id"
+        )
+
+    cur.execute(
+        "SELECT glider_asset_id FROM asset_slocum_aft_section_details WHERE asset_id = %s",
+        (asset_id,),
+    )
+    row = cur.fetchone()
+    current = row["glider_asset_id"] if row else None
+    if current == glider_asset_id:
+        report.append(f"    core link: already set (aft {asset_id} -> glider {glider_asset_id}) — skipped")
+        return
+    if current is not None:
+        warnings.append(
+            f"aft section (asset {asset_id}) is already the core of glider {current}, "
+            f"worksheet says {glider_asset_id} -- not overwritten, resolve by hand"
+        )
+        return
+
+    # Would this glider end up with two aft sections?
+    cur.execute(
+        "SELECT asset_id FROM asset_slocum_aft_section_details "
+        "WHERE glider_asset_id = %s AND asset_id <> %s",
+        (glider_asset_id, asset_id),
+    )
+    other = cur.fetchone()
+    if other is not None:
+        warnings.append(
+            f"glider {glider_asset_id} already has aft section {other['asset_id']} as its core; "
+            f"worksheet adds {asset_id} -- not written, resolve by hand"
+        )
+        return
+
+    if commit:
+        cur.execute(
+            "UPDATE asset_slocum_aft_section_details SET glider_asset_id = %s WHERE asset_id = %s",
+            (glider_asset_id, asset_id),
+        )
+        report.append(f"    core link: SET  aft {asset_id} -> glider {glider_asset_id}")
+    else:
+        report.append(f"    core link: would set  aft {asset_id} -> glider {glider_asset_id} (dry run)")
+
+
 def sync_assignment(cur, commit, asset_id, parent_asset_id, component, glider_purchase_date, report, warnings):
     start_date = component.get("start_date", glider_purchase_date)
     position = component.get("position")
@@ -417,8 +478,13 @@ def main():
 
                 sync_detail(cur, args.commit, asset_type, asset_id, component, report, warnings)
                 sync_cal(cur, args.commit, asset_type, asset_id, component, report, warnings)
-                check_open_elsewhere(cur, asset_id, parent_asset_id, warnings)
-                sync_assignment(cur, args.commit, asset_id, parent_asset_id, component, glider_purchase_date, report, warnings)
+                if asset_type == "slocum_aft_section":
+                    sync_core_aft_section(
+                        cur, args.commit, asset_id, glider_asset_id, component, report, warnings
+                    )
+                else:
+                    check_open_elsewhere(cur, asset_id, parent_asset_id, warnings)
+                    sync_assignment(cur, args.commit, asset_id, parent_asset_id, component, glider_purchase_date, report, warnings)
 
             print(f"\nGlider asset_id={glider_asset_id} — {len(components)} component(s)\n")
             print("\n".join(report))
