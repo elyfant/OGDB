@@ -39,3 +39,16 @@
     cross-reference in the vendor paperwork itself -- record any
     asset using this term with a note flagging it as inferred, not
     vendor-confirmed.
+- uri: http://vocab.nerc.ac.uk/collection/L22/current/TOOL0215/
+  note: >-
+    WET Labs {Sea-Bird WETLabs} ECO FLNTU combined fluorometer and
+    turbidity sensor. Matches sci_flntu_* on the early gliders (gna,
+    snotra). Two ECO-FLNTU(RT)D variants also exist (TOOL1283, TOOL1531)
+    if a specific unit turns out to be an RT model.
+- uri: http://vocab.nerc.ac.uk/collection/L22/current/TOOL0836/
+  note: >-
+    Aanderaa 3830 oxygen optode -- used for the Aanderaa Oxygen Optode
+    3835 (sci_oxy3835_* on gna, mission 28 onward). L22 has no distinct
+    3835 term; the 3835 is the same sensor as the 3830 in a different
+    bulkhead/end-cap for glider mounting. Inferred, not vendor-confirmed
+    -- flag any asset using this term.
