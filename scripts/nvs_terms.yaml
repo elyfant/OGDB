@@ -39,6 +39,12 @@
     cross-reference in the vendor paperwork itself -- record any
     asset using this term with a note flagging it as inferred, not
     vendor-confirmed.
+- uri: http://vocab.nerc.ac.uk/collection/L22/current/TOOL1492/
+  note: >-
+    Sea-Bird Slocum Glider Payload CTD (GPCTD) -- the pumped GPCTD as
+    fitted to Slocum gliders (the Slocum-specific term; TOOL1026 is the
+    platform-agnostic GPCTD). Not the same as the Sea-Bird "CT Sail"
+    (TOOL1188), which is the unpumped Seaglider CT sensor.
 - uri: http://vocab.nerc.ac.uk/collection/L22/current/TOOL0215/
   note: >-
     WET Labs {Sea-Bird WETLabs} ECO FLNTU combined fluorometer and
