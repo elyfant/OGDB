@@ -58,3 +58,13 @@
     3835 term; the 3835 is the same sensor as the 3830 in a different
     bulkhead/end-cap for glider mounting. Inferred, not vendor-confirmed
     -- flag any asset using this term.
+- uri: https://vocab.nerc.ac.uk/collection/L22/current/TOOL1239/
+  note: >-
+    Aanderaa 4831 oxygen optode (sci_oxy4_* on the later gliders). The
+    plain 4831; the fast-foil 4831F is TOOL1240.
+- uri: https://vocab.nerc.ac.uk/collection/L22/current/TOOL1312/
+  note: >-
+    WET Labs {Sea-Bird WETLabs} ECO Puck Triplet FLBBCD-SLC -- the
+    Slocum-mount three-channel puck: chlorophyll fluorescence + optical
+    backscatter + CDOM (sci_flbbcd_* on the fleet's three-channel ECO
+    gliders).
