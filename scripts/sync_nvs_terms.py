@@ -61,6 +61,9 @@ def load_manifest() -> list:
 
 
 def upsert_term(conn, term: dict) -> None:
+    # NB: display_label is deliberately absent here -- it's the facility's
+    # hand-chosen short label and must survive re-syncs. pref_label is the
+    # canonical NVS mirror; nvs_terms.label = COALESCE(display_label, pref_label).
     with conn.cursor() as cur:
         cur.execute(
             """
