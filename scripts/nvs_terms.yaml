@@ -11,8 +11,9 @@
 # on asset_sensor_details; P01 (measured parameter) on
 # asset_sensor_parameters, many-to-many since one sensor outputs several
 # parameters; C19 (SeaVoX water-body gazetteer, the vocabulary CF/OG1
-# `sea_name` draws on) on mission_sea_names, many-to-many. platforms/L06/
-# B76 are a deferred follow-up — see design-notes.md.
+# `sea_name` draws on) on mission_sea_names, many-to-many; L06 (category)
+# and B76 (model) on platforms. B76/L06 terms are seeded by the
+# xxxx_nvs_back_platforms migration, not this manifest.
 #
 # Format:
 # - uri: http://vocab.nerc.ac.uk/collection/L22/current/TOOL0942/
