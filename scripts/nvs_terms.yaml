@@ -10,8 +10,9 @@
 # Currently wired into the schema: L05 (sensor_family) and L22 (model)
 # on asset_sensor_details; P01 (measured parameter) on
 # asset_sensor_parameters, many-to-many since one sensor outputs several
-# parameters. platforms/L06/B76 are a deferred follow-up — see
-# design-notes.md.
+# parameters; C19 (SeaVoX water-body gazetteer, the vocabulary CF/OG1
+# `sea_name` draws on) on mission_sea_names, many-to-many. platforms/L06/
+# B76 are a deferred follow-up — see design-notes.md.
 #
 # Format:
 # - uri: http://vocab.nerc.ac.uk/collection/L22/current/TOOL0942/
@@ -68,3 +69,29 @@
     Slocum-mount three-channel puck: chlorophyll fluorescence + optical
     backscatter + CDOM (sci_flbbcd_* on the fleet's three-channel ECO
     gliders).
+
+# --- C19 sea areas (SeaVoX water-body gazetteer) -> mission_sea_names ---
+# The recognised sea area(s) a mission's data covers, for the CF `sea_name`
+# attribute. C19 is coarse (IHO-level): finer sub-regions the fleet works
+# in -- Faroe-Shetland Channel, Lofoten Basin, individual fjords -- have no
+# C19 term and are not represented here (decision pending on free text).
+- uri: http://vocab.nerc.ac.uk/collection/C19/current/9/
+  note: Arctic Ocean (parent of the Nordic/Barents seas below)
+- uri: http://vocab.nerc.ac.uk/collection/C19/current/9_4/
+  note: Barents Sea -- e.g. the legacy/Barents deployments
+- uri: http://vocab.nerc.ac.uk/collection/C19/current/9_6/
+  note: Greenland Sea
+- uri: http://vocab.nerc.ac.uk/collection/C19/current/9_7/
+  note: >-
+    Norwegian Sea -- the fleet's main operating area (Svinoy, Gimsoy,
+    Lofoten, Faroe sections all fall within it)
+- uri: http://vocab.nerc.ac.uk/collection/C19/current/9_8/
+  note: Iceland Sea
+- uri: http://vocab.nerc.ac.uk/collection/C19/current/9_12/
+  note: Baffin Bay
+- uri: http://vocab.nerc.ac.uk/collection/C19/current/FRAM/
+  note: Fram Strait
+- uri: http://vocab.nerc.ac.uk/collection/C19/current/3_1/
+  note: Mediterranean Sea -- the BioSWOT deployment
+- uri: http://vocab.nerc.ac.uk/collection/C19/current/10_1/
+  note: Weddell Sea
