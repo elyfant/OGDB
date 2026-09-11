@@ -3,13 +3,18 @@
 
 Target file format
 ------------------
-The pyglider gridded L2 product, e.g.
-    002-gna_naco_faroe_jun2012/pyglider/L2/002-gna_naco_faroe_jun2012_L2.nc
-CF/ACDD, featureType 'trajectoryProfile'. A `time` dimension (one entry per
-CTD profile / half-yo) and a `depth` dimension (the vertical grid). 1-D
-coordinates `latitude`, `longitude`, `time` are per-profile; 2-D fields like
-`temperature`, `salinity`, `profile_direction`, `distance_over_ground` are
-(depth, time).
+The pyglider gridded L2 product, converted to OG1 variable names (see
+slocum_data_processing's og1/convert.py -- as of 2026-09-12 that pipeline
+only persists L0 and OG1, so this is what actually lands on disk now),
+e.g.
+    002-gna_naco_faroe_jun2012/pyglider/OG1/002-gna_naco_faroe_jun2012_L2_OG1.nc
+CF/ACDD + OG-1.0 in `Conventions`, featureType 'trajectoryProfile'. A `TIME`
+dimension (one entry per CTD profile / half-yo) and a `DEPTH` dimension (the
+vertical grid). 1-D coordinates `LATITUDE`, `LONGITUDE`, `TIME` are
+per-profile; 2-D fields like `TEMP`, `PSAL`, `PROFILE_DIRECTION`,
+`DISTANCE_OVER_GROUND` are (DEPTH, TIME). Global attrs (`processing_level`,
+`time_coverage_start`) are untouched by the OG1 rename -- still lowercase,
+still set by pyglider itself.
 
 input: std_mission_name (positional) -- see mission_ingest_common.
 
@@ -21,9 +26,9 @@ What it does
        end_date_science / recovery_date                    (last profile)
        recovery_latitude / recovery_longitude              (last profile)
        dives                                               (# of down casts,
-                                                            profile_direction == 1)
+                                                            PROFILE_DIRECTION == 1)
        distance_km                                         (span of
-                                                            distance_over_ground,
+                                                            DISTANCE_OVER_GROUND,
                                                             else great-circle sum)
 2. Surface track: one row per profile -> latitude, longitude, utc,
    temperature, salinity from the shallowest finite bin of that profile.
@@ -52,10 +57,10 @@ from mission_ingest_common import (
 
 
 def _profile_direction(ds, n):
-    """Per-profile down(+1)/up(-1) flag from the (depth, time) profile_direction
+    """Per-profile down(+1)/up(-1) flag from the (DEPTH, TIME) PROFILE_DIRECTION
     grid: the single finite value in each column, or NaN if a column is
     empty/mixed."""
-    grid = col(ds, "profile_direction")  # (depth, time)
+    grid = col(ds, "PROFILE_DIRECTION")  # (DEPTH, TIME)
     out = np.full(n, np.nan)
     for i in range(n):
         vals = np.unique(grid[:, i][np.isfinite(grid[:, i])])
@@ -68,17 +73,17 @@ def read_netcdf(path):
     warnings = []
     ds = Dataset(path)
     try:
-        n = ds.dimensions["time"].size
+        n = ds.dimensions["TIME"].size
 
         level = (getattr(ds, "processing_level", "") or "").strip()
         if level and level.upper() != "L2":
             warnings.append(f"processing_level attr is {level!r}, expected 'L2'.")
 
-        lat = col(ds, "latitude")   # (time,)
-        lon = col(ds, "longitude")
-        t = col(ds, "time")         # epoch seconds
-        temp = col(ds, "temperature")   # (depth, time)
-        sal = col(ds, "salinity")
+        lat = col(ds, "LATITUDE")   # (TIME,)
+        lon = col(ds, "LONGITUDE")
+        t = col(ds, "TIME")         # epoch seconds
+        temp = col(ds, "TEMP")      # (DEPTH, TIME)
+        sal = col(ds, "PSAL")
 
         if not np.all(np.isfinite(t)):
             warnings.append(f"{int((~np.isfinite(t)).sum())} of {n} profiles have no time; skipped.")
@@ -95,7 +100,7 @@ def read_netcdf(path):
         if np.isfinite(direction).sum() < 0.5 * keep.size:
             dives = round(keep.size / 2)
             warnings.append(
-                f"profile_direction unusable for most profiles; dives set to "
+                f"PROFILE_DIRECTION unusable for most profiles; dives set to "
                 f"profiles/2 = {dives}."
             )
         else:
@@ -108,7 +113,7 @@ def read_netcdf(path):
             i = int(i)
             col_temp = temp[:, i]
             first_idx = np.where(np.isfinite(col_temp))[0]
-            if first_idx.size and float(ds.variables["depth"][first_idx[0]]) > 20:
+            if first_idx.size and float(ds.variables["DEPTH"][first_idx[0]]) > 20:
                 deep_surface += 1
             track.append(
                 {
@@ -134,22 +139,23 @@ def read_netcdf(path):
                 "the tracks CHECK constraint will reject them."
             )
 
-        # distance: distance_over_ground is cumulative along-track km. Use its
+        # distance: DISTANCE_OVER_GROUND is cumulative along-track km. Use its
         # span over the profiles present (it does not reset to 0 at the start
         # of a segmented L2 file). Fall back to the great-circle track sum.
         distance_source = "distance_over_ground span"
-        dog = col(ds, "distance_over_ground") if "distance_over_ground" in ds.variables else np.array([np.nan])
+        dog = col(ds, "DISTANCE_OVER_GROUND") if "DISTANCE_OVER_GROUND" in ds.variables else np.array([np.nan])
         dog = dog[np.isfinite(dog)]
         if dog.size:
             distance_km = float(dog.max() - dog.min())
         else:
             distance_km = track_length_km(track)
-            distance_source = "great-circle track sum (no distance_over_ground)"
+            distance_source = "great-circle track sum (no DISTANCE_OVER_GROUND)"
         warnings.append(f"distance_km from {distance_source}.")
 
-        # segmented-file check: the CF time_coverage_start attr disagreeing with
+        # segmented-file check: the time_coverage_start attr disagreeing with
         # the first real profile means this L2 file is only part of the mission,
         # so dives / distance_km / launch_date reflect the file, not the mission.
+        # (This is a plain global attr, untouched by the OG1 variable rename.)
         tcs = (getattr(ds, "time_coverage_start", "") or "").strip()
         if tcs:
             try:
