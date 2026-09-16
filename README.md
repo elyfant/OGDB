@@ -4,7 +4,7 @@ Ocean Glider Database — core Postgres+PostGIS asset-tracking database for
 the Ocean Glider Facility, University of Bergen: gliders, sensors,
 sub-assemblies, calibration history, and missions. Single source of truth
 for mission/glider metadata, consumed by `OGDB-portal`,
-`slocum_data_processing`, and `norgliders-ERDDAP`.
+`norgliders-data-pipeline`, and `norgliders-ERDDAP`.
 
 See `webapp-roadmap.md` and `alembic/design-notes.md` / `alembic/erd.md`
 for schema design notes.

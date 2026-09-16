@@ -4,7 +4,8 @@
 Target file format
 ------------------
 The pyglider gridded L2 product, converted to OG1 variable names (see
-slocum_data_processing's og1/convert.py -- as of 2026-09-12 that pipeline
+norgliders-data-pipeline's og1/convert.py (repo renamed from
+slocum_data_processing 2026-09-16) -- as of 2026-09-12 that pipeline
 only persists L0 and OG1, so this is what actually lands on disk now),
 e.g.
     002-gna_naco_faroe_jun2012/pyglider/OG1/002-gna_naco_faroe_jun2012_L2_OG1.nc
