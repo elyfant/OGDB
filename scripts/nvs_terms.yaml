@@ -18,6 +18,10 @@
 # Format:
 # - uri: http://vocab.nerc.ac.uk/collection/L22/current/TOOL0942/
 #   note: why this term is here (which equipment it matches)
+#
+# An entry can instead mirror a whole collection (`collection:` instead of
+# `uri:`) when curating term-by-term doesn't make sense — see the OG1
+# entry below for when that's the right call and when it isn't.
 
 - uri: http://vocab.nerc.ac.uk/collection/P01/current/TEMPPR01/
   note: Measured parameter for every ct_sensor (temperature channel)
@@ -96,3 +100,22 @@
   note: Mediterranean Sea -- the BioSWOT deployment
 - uri: http://vocab.nerc.ac.uk/collection/C19/current/10_1/
   note: Weddell Sea
+
+# --- OG1 (OceanGliders variable/attribute vocabulary) -- full mirror ---
+# Not wired into any OGDB table yet (nothing here reads OG1 today) -- this
+# is the reference copy norgliders-data-pipeline's og1/convert.py can be
+# checked/extended against, and how og1 stays reachable if NVS is ever
+# slow/down/changed, same reasoning as every other collection here.
+#
+# Unlike L05/L22/etc., mirrored in full rather than curated: confirmed
+# directly (2026-09-25) it's small (120 terms) and entirely on-topic for
+# gliders -- OG1 IS the glider vocabulary, there's no "irrelevant equipment
+# code" chaff to filter the way L05/L22 have. Also confirmed directly:
+# structural/nav names (LATITUDE, TRAJECTORY, PLATFORM, TIME, ...) are NOT
+# in this collection -- it's measured/derived parameters only (TEMP, PSAL,
+# CNDC, TURB, ...), matching og1/convert.py's own _GEOPHYSICAL_OG1_NAMES
+# scoping decision.
+- collection: OG1
+  note: >-
+    OceanGliders variable vocabulary -- full mirror, not curated (see
+    above for why this collection specifically gets that treatment).
