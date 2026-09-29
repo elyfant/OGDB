@@ -1,4 +1,4 @@
-"""Move `iridium_sim_card` from asset_slocum_aft_section_details to
+"""Move `iridium_sim_iccid` from asset_slocum_aft_section_details to
 asset_glider_details, so every glider -- Slocum and Seaglider -- keeps
 its SIM in the same place.
 
@@ -20,7 +20,7 @@ SIM" and "the glider's SIM" are the same fact.
 
 What this migration does
 ------------------------
-1. Adds asset_glider_details.iridium_sim_card, nullable + UNIQUE (a
+1. Adds asset_glider_details.iridium_sim_iccid, nullable + UNIQUE (a
    glider with no SIM recorded is NULL; Postgres allows many NULLs under
    UNIQUE; no two gliders can share a SIM).
 2. Copies each aft section's ICCID onto its glider via glider_asset_id.
@@ -29,7 +29,7 @@ What this migration does
    number of copied rows doesn't match the number of source values.
 3. Recreates slocum_aft_section_details_with_glider without the column
    (a view that references a column blocks dropping it).
-4. Drops asset_slocum_aft_section_details.iridium_sim_card.
+4. Drops asset_slocum_aft_section_details.iridium_sim_iccid.
 
 Downgrade reverses all four steps and copies the Slocum values back. It
 refuses to run if a non-Slocum glider has a SIM recorded, since there'd
@@ -51,8 +51,8 @@ depends_on = None
 
 def _create_aft_view(with_sim: bool) -> None:
     # Same explicit column list as xxxx_aft_section_with_glider_view.py;
-    # iridium_sim_card sits where it did there when with_sim is True.
-    sim_col = "d.iridium_sim_card," if with_sim else ""
+    # iridium_sim_iccid sits where it did there when with_sim is True.
+    sim_col = "d.iridium_sim_iccid," if with_sim else ""
     op.execute(
         f"""
         CREATE VIEW slocum_aft_section_details_with_glider AS
@@ -67,7 +67,8 @@ def _create_aft_view(with_sim: bool) -> None:
             d.freewave_master,
             d.freewave_slave,
             {sim_col}
-            d.iridium_phone,
+            d.iridium_phone_sn,
+            d.iridium_imei,
             d.argos_x_cat,
             d.argos_hex,
             d.argos_dec,
@@ -93,12 +94,12 @@ def upgrade() -> None:
     # --- 1. new column on the glider --------------------------------
     op.add_column(
         "asset_glider_details",
-        sa.Column("iridium_sim_card", sa.String(50)),
+        sa.Column("iridium_sim_iccid", sa.String(50)),
     )
     op.create_unique_constraint(
-        "uq_glider_iridium_sim_card",
+        "uq_glider_iridium_sim_iccid",
         "asset_glider_details",
-        ["iridium_sim_card"],
+        ["iridium_sim_iccid"],
     )
 
     # --- 2. copy the Slocum values across ----------------------------
@@ -106,13 +107,13 @@ def upgrade() -> None:
         sa_text(
             """
             SELECT asset_id FROM asset_slocum_aft_section_details
-            WHERE iridium_sim_card IS NOT NULL AND glider_asset_id IS NULL
+            WHERE iridium_sim_iccid IS NOT NULL AND glider_asset_id IS NULL
             """
         )
     ).scalars().all()
     if orphaned:
         raise RuntimeError(
-            f"aft section asset(s) {orphaned} have an iridium_sim_card but no "
+            f"aft section asset(s) {orphaned} have an iridium_sim_iccid but no "
             f"glider_asset_id -- pair them to a glider before rerunning, or "
             f"their SIM would be lost when the column is dropped"
         )
@@ -120,17 +121,17 @@ def upgrade() -> None:
     expected = conn.execute(
         sa_text(
             "SELECT count(*) FROM asset_slocum_aft_section_details "
-            "WHERE iridium_sim_card IS NOT NULL"
+            "WHERE iridium_sim_iccid IS NOT NULL"
         )
     ).scalar()
     copied = conn.execute(
         sa_text(
             """
             UPDATE asset_glider_details g
-            SET iridium_sim_card = d.iridium_sim_card
+            SET iridium_sim_iccid = d.iridium_sim_iccid
             FROM asset_slocum_aft_section_details d
             WHERE d.glider_asset_id = g.asset_id
-              AND d.iridium_sim_card IS NOT NULL
+              AND d.iridium_sim_iccid IS NOT NULL
             """
         )
     ).rowcount
@@ -139,14 +140,14 @@ def upgrade() -> None:
             f"copied {copied} SIM(s) onto asset_glider_details, expected "
             f"{expected} -- check glider_asset_id pairings before rerunning"
         )
-    print(f"  moved {copied} iridium_sim_card value(s) onto asset_glider_details")
+    print(f"  moved {copied} iridium_sim_iccid value(s) onto asset_glider_details")
 
     # --- 3. view no longer carries the column -------------------------
     op.execute("DROP VIEW slocum_aft_section_details_with_glider;")
     _create_aft_view(with_sim=False)
 
     # --- 4. drop the old column --------------------------------------
-    op.drop_column("asset_slocum_aft_section_details", "iridium_sim_card")
+    op.drop_column("asset_slocum_aft_section_details", "iridium_sim_iccid")
 
 
 def downgrade() -> None:
@@ -158,7 +159,7 @@ def downgrade() -> None:
         sa_text(
             """
             SELECT g.glider_name FROM asset_glider_details g
-            WHERE g.iridium_sim_card IS NOT NULL
+            WHERE g.iridium_sim_iccid IS NOT NULL
               AND NOT EXISTS (
                   SELECT 1 FROM asset_slocum_aft_section_details d
                   WHERE d.glider_asset_id = g.asset_id
@@ -168,23 +169,23 @@ def downgrade() -> None:
     ).scalars().all()
     if homeless:
         raise RuntimeError(
-            f"glider(s) {homeless} have an iridium_sim_card but no aft "
+            f"glider(s) {homeless} have an iridium_sim_iccid but no aft "
             f"section to move it back to -- clear or export those values "
             f"before downgrading"
         )
 
     op.add_column(
         "asset_slocum_aft_section_details",
-        sa.Column("iridium_sim_card", sa.String(50)),
+        sa.Column("iridium_sim_iccid", sa.String(50)),
     )
     conn.execute(
         sa_text(
             """
             UPDATE asset_slocum_aft_section_details d
-            SET iridium_sim_card = g.iridium_sim_card
+            SET iridium_sim_iccid = g.iridium_sim_iccid
             FROM asset_glider_details g
             WHERE d.glider_asset_id = g.asset_id
-              AND g.iridium_sim_card IS NOT NULL
+              AND g.iridium_sim_iccid IS NOT NULL
             """
         )
     )
@@ -193,6 +194,6 @@ def downgrade() -> None:
     _create_aft_view(with_sim=True)
 
     op.drop_constraint(
-        "uq_glider_iridium_sim_card", "asset_glider_details", type_="unique"
+        "uq_glider_iridium_sim_iccid", "asset_glider_details", type_="unique"
     )
-    op.drop_column("asset_glider_details", "iridium_sim_card")
+    op.drop_column("asset_glider_details", "iridium_sim_iccid")

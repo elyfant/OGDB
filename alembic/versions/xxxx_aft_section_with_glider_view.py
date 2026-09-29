@@ -17,13 +17,13 @@ so a star would quietly miss any column added to the table later. With
 an explicit list, adding a column means consciously updating this view.
 
 Revision ID: xxxx_aft_section_with_glider_view
-Revises: xxxx_fix_id_sequence_drift
+Revises: xxxx_aft_section_prod_column_names
 Create Date: 2026-09-29
 """
 from alembic import op
 
 revision = "xxxx_aft_section_with_glider_view"
-down_revision = "xxxx_fix_id_sequence_drift"
+down_revision = "xxxx_aft_section_prod_column_names"
 branch_labels = None
 depends_on = None
 
@@ -42,8 +42,9 @@ def upgrade() -> None:
             d.aft_electronic_assy,
             d.freewave_master,
             d.freewave_slave,
-            d.iridium_sim_card,
-            d.iridium_phone,
+            d.iridium_sim_iccid,
+            d.iridium_phone_sn,
+            d.iridium_imei,
             d.argos_x_cat,
             d.argos_hex,
             d.argos_dec,
