@@ -93,23 +93,37 @@ def out_of_range_fixes(track):
 def dedupe_track_by_utc(track):
     """Keep the first point at each unique utc, drop the rest.
 
-    Some Seaglider basestation output repeats the same start_time across
-    several consecutive down casts near the end of a mission (observed on
-    missions 007/008 -- looks like a basestation artifact, not a reading
-    error). tracks is UNIQUE on (missions_id, utc), so repeats can't be stored.
+    Some Seaglider basestation output gives consecutive dives the same
+    start time AND position as an earlier dive -- the last GPS fix carried
+    forward when no new one was recorded. Seen on 17 of 48 Seaglider
+    missions, anywhere in the mission, not only near the end (e.g. mission
+    058: 74 repeats between dives 555 and 1366, every one with an identical
+    position). tracks is UNIQUE on (missions_id, utc), so repeats can't be
+    stored; dropping them loses no position or distance.
 
-    Returns (deduped_track, n_dropped).
+    A repeat with the same utc but a DIFFERENT position would be a real
+    data problem rather than a carried-forward fix, so it's counted
+    separately for the caller to flag.
+
+    Returns (deduped_track, n_dropped, n_moved) -- n_moved is how many of
+    the dropped points had a different lat/lon from the point kept.
     """
-    seen = set()
+    kept = {}
     out = []
-    dropped = 0
+    dropped = moved = 0
     for p in track:
-        if p["utc"] in seen:
+        first = kept.get(p["utc"])
+        if first is not None:
             dropped += 1
+            if (round(first["latitude"], 5), round(first["longitude"], 5)) != (
+                round(p["latitude"], 5),
+                round(p["longitude"], 5),
+            ):
+                moved += 1
             continue
-        seen.add(p["utc"])
+        kept[p["utc"]] = p
         out.append(p)
-    return out, dropped
+    return out, dropped, moved
 
 
 # ---------------------------------------------------------------------

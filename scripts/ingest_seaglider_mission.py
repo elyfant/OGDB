@@ -23,8 +23,8 @@ uses and dispatches accordingly:
     directly, used for the pairing sanity-check instead.
 
 Both feed the same shared tail (_assemble()): build the track, drop any
-duplicate-utc surface fixes (seen near end-of-mission on a few older
-missions -- a basestation artifact, not a reading error), and compute the
+repeated surface fixes (consecutive dives carrying forward the previous
+GPS fix's time and position -- see dedupe_track_by_utc()), and compute the
 missions metadata dict.
 
 input: mission_number (positional) -- missions.mission_number, the `NNN-`
@@ -202,12 +202,18 @@ def _assemble(n, down_idx, warnings, start_lat, start_lon, start_time, end_lat, 
             }
         )
 
-    track, n_dropped = dedupe_track_by_utc(track)
-    if n_dropped:
+    track, n_dropped, n_moved = dedupe_track_by_utc(track)
+    if n_dropped - n_moved:
         warnings.append(
-            f"{n_dropped} duplicate utc timestamp(s) among the surface fixes "
-            "(basestation artifact seen near end-of-mission) -- kept the "
-            "first of each, dropped the rest."
+            f"{n_dropped - n_moved} dive(s) repeat an earlier dive's start time and "
+            "position (GPS fix carried forward, no new fix recorded) -- dropped "
+            "the repeats, no position or distance lost."
+        )
+    if n_moved:
+        warnings.append(
+            f"{n_moved} dive(s) share an earlier dive's start time but have a "
+            "DIFFERENT position -- dropped, but worth checking the file: this "
+            "is not the usual carried-forward GPS fix."
         )
 
     bad = out_of_range_fixes(track)
