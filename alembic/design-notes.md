@@ -844,9 +844,11 @@ the primary key in place of `id` (8 foreign keys to migrate, and a key with
 real-world meaning is exactly the one someone eventually wants to change --
 the meaningless `id` underneath is cheap insurance).
 
-Possible follow-up: a trigger rejecting UPDATEs to `mission_number`, so
-"never reassigned" is enforced rather than remembered. Deferred until the
-folder 100/101 numbering is confirmed on prod, so it can't block that fix.
+Enforced (2026-10-05, `xxxx_mission_number_immutable`): a trigger rejects
+any UPDATE that changes `mission_number`. Writing the same value back (as
+OGDB-portal's edit-mission save does) still works. For a genuine
+correction: `BEGIN; SET LOCAL ogdb.allow_mission_number_change = 'on';
+UPDATE ...; COMMIT;` -- and rename the data folder to match.
 
 ## How I (Fiona) like to work — see also `~/.claude/CLAUDE.md`
 
