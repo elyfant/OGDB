@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 
 import numpy as np
 
+from settings import require_database_url
+
 EARTH_RADIUS_KM = 6371.0088
 
 # The missions columns the ingest computes from the NetCDF and overwrites,
@@ -88,6 +90,28 @@ def out_of_range_fixes(track):
     ]
 
 
+def dedupe_track_by_utc(track):
+    """Keep the first point at each unique utc, drop the rest.
+
+    Some Seaglider basestation output repeats the same start_time across
+    several consecutive down casts near the end of a mission (observed on
+    missions 007/008 -- looks like a basestation artifact, not a reading
+    error). Repeated utc values break the tracks(missions_id, utc) upsert.
+
+    Returns (deduped_track, n_dropped).
+    """
+    seen = set()
+    out = []
+    dropped = 0
+    for p in track:
+        if p["utc"] in seen:
+            dropped += 1
+            continue
+        seen.add(p["utc"])
+        out.append(p)
+    return out, dropped
+
+
 # ---------------------------------------------------------------------
 # Database
 # ---------------------------------------------------------------------
@@ -123,6 +147,32 @@ def resolve_mission(cur, std_mission_name):
         ids = ", ".join(str(r["id"]) for r in rows)
         sys.exit(f"{len(rows)} missions match std_mission_name = {std_mission_name!r} (ids: {ids}). Refusing to guess.")
     return rows[0]["id"], rows[0]["std_mission_name"], rows[0]["l2_file"]
+
+
+def resolve_mission_by_id(cur, mission_id):
+    """Look the mission up by norglider_missions.id / missions.id (same PK).
+
+    Returns (id, std_mission_name). Unlike resolve_mission(), does not return
+    l2_file -- callers that locate their own NetCDF on disk don't need it.
+    """
+    cur.execute(
+        """
+        SELECT nm.id, nm.std_mission_name
+        FROM norglider_missions nm
+        JOIN missions m ON m.id = nm.id
+        WHERE nm.id = %s
+        """,
+        (mission_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        sys.exit(f"No mission with id = {mission_id}.")
+    if not row["std_mission_name"]:
+        sys.exit(
+            f"Mission id={mission_id} has no std_mission_name yet "
+            "(NULL until glider, project, site and launch_date are all set)."
+        )
+    return row["id"], row["std_mission_name"]
 
 
 def update_mission(cur, mission_id, metadata):
@@ -202,6 +252,25 @@ def print_summary(kind, std_mission_name, path, metadata, track, warnings):
 # Runner
 # ---------------------------------------------------------------------
 
+def _ingest_and_write(cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, commit):
+    """Shared tail of both run_ingest() and run_ingest_by_id(): read the
+    NetCDF, print the summary, write missions + tracks, commit or roll back."""
+    metadata, track, warnings = read_netcdf(l2_path)
+    print_summary(kind, std_name, l2_path, metadata, track, warnings)
+
+    updated = update_mission(cur, mission_id, metadata)
+    n_tracks = upsert_tracks(cur, mission_id, track)
+    print(f"missions rows updated: {updated}")
+    print(f"tracks rows upserted:  {n_tracks}")
+
+    if commit:
+        conn.commit()
+        print("\nCommitted.")
+    else:
+        conn.rollback()
+        print("\nDry run -- rolled back. Re-run with --commit to apply.")
+
+
 def run_ingest(kind, read_netcdf):
     """CLI + DB flow shared by every platform ingest script.
 
@@ -224,9 +293,7 @@ def run_ingest(kind, read_netcdf):
     parser.add_argument("--commit", action="store_true", help="write to the DB (default: dry run)")
     args = parser.parse_args()
 
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        sys.exit("DATABASE_URL environment variable not set")
+    database_url = require_database_url()
 
     import psycopg2
     import psycopg2.extras
@@ -244,19 +311,54 @@ def run_ingest(kind, read_netcdf):
             if not os.path.isfile(l2_file):
                 sys.exit(f"l2_file for {std_name!r} does not exist on disk: {l2_file}")
 
-            metadata, track, warnings = read_netcdf(l2_file)
-            print_summary(kind, std_name, l2_file, metadata, track, warnings)
+            _ingest_and_write(cur, conn, kind, mission_id, std_name, l2_file, read_netcdf, args.commit)
+    finally:
+        conn.close()
 
-            updated = update_mission(cur, mission_id, metadata)
-            n_tracks = upsert_tracks(cur, mission_id, track)
-            print(f"missions rows updated: {updated}")
-            print(f"tracks rows upserted:  {n_tracks}")
 
-            if args.commit:
-                conn.commit()
-                print("\nCommitted.")
-            else:
-                conn.rollback()
-                print("\nDry run -- rolled back. Re-run with --commit to apply.")
+def run_ingest_by_id(kind, read_netcdf, find_l2_file):
+    """CLI + DB flow variant that resolves the mission by its numeric id and
+    locates the L2 NetCDF on disk, instead of trusting missions.l2_file.
+
+    find_l2_file(mission_id, std_mission_name) -> path (str). It does its own
+    printing/disambiguation and may sys.exit() if it can't decide on a file.
+    """
+    parser = argparse.ArgumentParser(
+        prog=f"ingest_{kind.lower()}_mission.py",
+        description=(
+            f"Ingest a {kind} mission L2 NetCDF into OGDB (mission metadata + surface "
+            "track). The mission is resolved by id; the NetCDF is found on disk, "
+            "not read from missions.l2_file."
+        ),
+    )
+    parser.add_argument(
+        "mission_id",
+        type=int,
+        help="norglider_missions.id / missions.id",
+    )
+    parser.add_argument(
+        "--file",
+        help="explicit L2 NetCDF path -- skips auto-discovery on disk",
+    )
+    parser.add_argument("--commit", action="store_true", help="write to the DB (default: dry run)")
+    args = parser.parse_args()
+
+    database_url = require_database_url()
+
+    import psycopg2
+    import psycopg2.extras
+
+    conn = psycopg2.connect(database_url)
+    conn.autocommit = False
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            mission_id, std_name = resolve_mission_by_id(cur, args.mission_id)
+            print(f"matched mission id={mission_id}  std_mission_name={std_name!r}")
+
+            l2_path = args.file if args.file else find_l2_file(mission_id, std_name)
+            if not os.path.isfile(l2_path):
+                sys.exit(f"L2 file does not exist on disk: {l2_path}")
+
+            _ingest_and_write(cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, args.commit)
     finally:
         conn.close()
