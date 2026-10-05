@@ -149,30 +149,55 @@ def resolve_mission(cur, std_mission_name):
     return rows[0]["id"], rows[0]["std_mission_name"], rows[0]["l2_file"]
 
 
-def resolve_mission_by_id(cur, mission_id):
-    """Look the mission up by norglider_missions.id / missions.id (same PK).
+def lookup_mission_by_number(cur, mission_number):
+    """Look the mission up by missions.mission_number -- the facility's
+    mission number, the `NNN-` prefix of each mission data folder.
 
-    Returns (id, std_mission_name). Unlike resolve_mission(), does not return
-    l2_file -- callers that locate their own NetCDF on disk don't need it.
+    NOT missions.id: that's only the surrogate primary key, and it diverges
+    from mission_number for the newest missions (e.g. mission_number 95 is
+    id 96). mission_number is NOT NULL + UNIQUE, one counter shared across
+    Slocum and Seaglider.
+
+    Returns a row with id (the PK -- what every write uses), std_mission_name
+    and glider, or None if no mission has that number. std_mission_name may
+    be NULL (it's NULL until glider, project, site and launch_date are all
+    set) -- that doesn't block an ingest, which is what fills launch_date.
     """
     cur.execute(
         """
-        SELECT nm.id, nm.std_mission_name
-        FROM norglider_missions nm
-        JOIN missions m ON m.id = nm.id
-        WHERE nm.id = %s
+        SELECT m.id, nm.std_mission_name, nm.glider
+        FROM missions m
+        JOIN norglider_missions nm ON nm.id = m.id
+        WHERE m.mission_number = %s
         """,
-        (mission_id,),
+        (mission_number,),
     )
-    row = cur.fetchone()
-    if not row:
-        sys.exit(f"No mission with id = {mission_id}.")
-    if not row["std_mission_name"]:
-        sys.exit(
-            f"Mission id={mission_id} has no std_mission_name yet "
-            "(NULL until glider, project, site and launch_date are all set)."
+    return cur.fetchone()
+
+
+def folder_glider(folder_name):
+    """Glider code from a `<NNN>-<glider>_<...>` mission folder name
+    (e.g. '095-sg561_rover_iceland_feb2025' -> 'sg561'), lowercased."""
+    if "-" not in folder_name:
+        return ""
+    return folder_name.split("-", 1)[1].split("_")[0].lower()
+
+
+def folder_mismatch(mission_number, folder_name, row):
+    """None if the folder's glider code matches the mission row's glider,
+    else a message explaining why the folder must not be ingested under
+    this mission_number. Guards against a folder numbered wrongly on disk
+    silently overwriting a different mission's data."""
+    db_glider = (row["glider"] or "").lower()
+    if not db_glider:
+        return f"mission_number {mission_number} has no glider set in OGDB -- set it first"
+    if folder_glider(folder_name) != db_glider:
+        label = row["std_mission_name"] or f"a {db_glider} mission"
+        return (
+            f"glider mismatch -- mission_number {mission_number} in OGDB is "
+            f"{label!r} (id={row['id']}), not this folder's mission; resolve manually"
         )
-    return row["id"], row["std_mission_name"]
+    return None
 
 
 def update_mission(cur, mission_id, metadata):
@@ -253,7 +278,7 @@ def print_summary(kind, std_mission_name, path, metadata, track, warnings):
 # ---------------------------------------------------------------------
 
 def _ingest_and_write(cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, commit):
-    """Shared tail of both run_ingest() and run_ingest_by_id(): read the
+    """Shared tail of both run_ingest() and run_ingest_by_number(): read the
     NetCDF, print the summary, write missions + tracks, commit or roll back."""
     metadata, track, warnings = read_netcdf(l2_path)
     print_summary(kind, std_name, l2_path, metadata, track, warnings)
@@ -316,25 +341,27 @@ def run_ingest(kind, read_netcdf):
         conn.close()
 
 
-def run_ingest_by_id(kind, read_netcdf, find_l2_file):
-    """CLI + DB flow variant that resolves the mission by its numeric id and
-    locates the L2 NetCDF on disk, instead of trusting missions.l2_file.
+def run_ingest_by_number(kind, read_netcdf, find_l2_file):
+    """CLI + DB flow variant that resolves the mission by its mission_number
+    and locates the L2 NetCDF on disk, instead of trusting missions.l2_file.
 
-    find_l2_file(mission_id, std_mission_name) -> path (str). It does its own
-    printing/disambiguation and may sys.exit() if it can't decide on a file.
+    find_l2_file(mission_number, row) -> path (str), row being
+    lookup_mission_by_number()'s result. It does its own printing,
+    disambiguation and folder/glider cross-check, and may sys.exit() if it
+    can't decide on a file.
     """
     parser = argparse.ArgumentParser(
         prog=f"ingest_{kind.lower()}_mission.py",
         description=(
             f"Ingest a {kind} mission L2 NetCDF into OGDB (mission metadata + surface "
-            "track). The mission is resolved by id; the NetCDF is found on disk, "
+            "track). The mission is resolved by mission_number; the NetCDF is found on disk, "
             "not read from missions.l2_file."
         ),
     )
     parser.add_argument(
-        "mission_id",
+        "mission_number",
         type=int,
-        help="norglider_missions.id / missions.id",
+        help="missions.mission_number (the NNN- prefix of the data folder) -- not missions.id",
     )
     parser.add_argument(
         "--file",
@@ -352,10 +379,14 @@ def run_ingest_by_id(kind, read_netcdf, find_l2_file):
     conn.autocommit = False
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            mission_id, std_name = resolve_mission_by_id(cur, args.mission_id)
-            print(f"matched mission id={mission_id}  std_mission_name={std_name!r}")
+            row = lookup_mission_by_number(cur, args.mission_number)
+            if not row:
+                sys.exit(f"No mission with mission_number = {args.mission_number}.")
+            mission_id = row["id"]
+            std_name = row["std_mission_name"] or f"(mission_number {args.mission_number}, no std name yet)"
+            print(f"matched mission_number={args.mission_number} -> id={mission_id}  std_mission_name={std_name!r}")
 
-            l2_path = args.file if args.file else find_l2_file(mission_id, std_name)
+            l2_path = args.file if args.file else find_l2_file(args.mission_number, row)
             if not os.path.isfile(l2_path):
                 sys.exit(f"L2 file does not exist on disk: {l2_path}")
 

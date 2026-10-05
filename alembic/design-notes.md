@@ -813,6 +813,41 @@ Not yet done: the OGDB-portal gateway module (controller/service/DTOs)
 that actually writes to these new columns — schema lands first, gateway
 work follows on top of it.
 
+## Mission identifiers: which one to use (2026-10-05)
+
+A mission has four name-like columns. They are not redundant -- each
+answers a different question, and only one of them is *the* identifier:
+
+| Column | Role | Changes? | Use it for |
+|---|---|---|---|
+| `missions.id` | surrogate primary key, no meaning | never | foreign keys only (tracks, documents, asset_assignments, ...) |
+| `missions.mission_number` | **the facility's mission identifier** (NOT NULL, UNIQUE, one counter across Slocum + Seaglider) | never -- not reassigned, even when a recovered mission is appended out of chronological order | everything people and scripts use to find a mission; the `NNN-` prefix of every mission data folder |
+| `norglider_missions.std_mission_name` | computed label, `glider_project_site_monYYYY`, all lower case | yes, automatically, whenever glider/project/site/launch_date is corrected | display |
+| `missions.mission_name` | historical label, the name the mission was known by at the time | rarely | finding old files, papers, cruise reports |
+
+Rules:
+- Scripts look missions up by `mission_number` and write under the row's
+  `id`. Never treat a folder's `NNN-` prefix as `missions.id` -- the two
+  diverge from mission_number 95 on (95 is id 96).
+- Never look a mission up by either name. Names describe the mission, and
+  descriptions get corrected: folder 098 says `jan2026` but its launch date
+  is 3 Feb, so its computed name is `..._feb2026`. In dev, `mission_name`
+  differs from `std_mission_name` for 81 of 100 missions (e.g. 25 is
+  `agf311811_2016` vs `freyja_naco_svalbard_nov2016`).
+- `std_mission_name` is NULL until glider, project, site and launch_date
+  are all set; that must not block an ingest, since the ingest is what
+  fills launch_date.
+
+Considered and rejected: dropping `mission_name` (loses the link to how old
+missions are named in files and publications), and making `mission_number`
+the primary key in place of `id` (8 foreign keys to migrate, and a key with
+real-world meaning is exactly the one someone eventually wants to change --
+the meaningless `id` underneath is cheap insurance).
+
+Possible follow-up: a trigger rejecting UPDATEs to `mission_number`, so
+"never reassigned" is enforced rather than remembered. Deferred until the
+folder 100/101 numbering is confirmed on prod, so it can't block that fix.
+
 ## How I (Fiona) like to work — see also `~/.claude/CLAUDE.md`
 
 Explain reasoning, not just implementation. For architecture decisions, give

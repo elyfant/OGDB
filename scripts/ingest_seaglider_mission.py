@@ -27,7 +27,9 @@ duplicate-utc surface fixes (seen near end-of-mission on a few older
 missions -- a basestation artifact, not a reading error), and compute the
 missions metadata dict.
 
-input: mission_id (positional) -- norglider_missions.id / missions.id.
+input: mission_number (positional) -- missions.mission_number, the `NNN-`
+prefix of the mission's data folder. NOT missions.id (only the primary key,
+which diverges from mission_number for the newest missions).
 
 Finding the file
 ----------------
@@ -37,9 +39,10 @@ file itself under the configured Seaglider data root (see
 config/ogdb_scripts.toml / scripts/settings.py -- $SEAGLIDER_DATA_ROOT
 overrides both files):
 
-1. glob `<data-root>/<NNN>-*` for the mission folder (NNN = mission_id,
+1. glob `<data-root>/<NNN>-*` for the mission folder (NNN = mission_number,
    zero-padded to 3 digits) -- mirrors the Slocum convention (see
-   norgliders/decisions/0003). Require exactly one hit.
+   norgliders/decisions/0003). Require exactly one hit, and its glider code
+   must match the mission's glider in OGDB.
 2. recursively find every `*up_and_down_profile.nc` under that folder
    (case-insensitive). The name must END in `profile.nc` -- variants such
    as `..._profile-ihe.nc` are someone's derived copy, not the basestation
@@ -87,7 +90,8 @@ from mission_ingest_common import (
     epoch_to_naive_utc,
     first_finite,
     out_of_range_fixes,
-    run_ingest_by_id,
+    folder_mismatch,
+    run_ingest_by_number,
     track_length_km,
 )
 from settings import require_seaglider_data_root
@@ -100,9 +104,9 @@ def is_l2_profile_file(path):
     return path.name.lower().endswith("up_and_down_profile.nc")
 
 
-def find_l2_file(mission_id, std_mission_name):
+def find_l2_file(mission_number, row):
     data_root = require_seaglider_data_root()
-    mission_glob = f"{mission_id:03d}-*"
+    mission_glob = f"{mission_number:03d}-*"
     mission_dirs = sorted(data_root.glob(mission_glob))
     if not mission_dirs:
         sys.exit(
@@ -114,6 +118,9 @@ def find_l2_file(mission_id, std_mission_name):
         listing = "\n  ".join(str(d) for d in mission_dirs)
         sys.exit(f"{len(mission_dirs)} folders match {mission_glob!r}, refusing to guess:\n  {listing}")
     mission_dir = mission_dirs[0]
+    problem = folder_mismatch(mission_number, mission_dir.name, row)
+    if problem:
+        sys.exit(f"{mission_dir.name}: {problem}")
 
     candidates = sorted(
         p for p in mission_dir.rglob("*.nc") if is_l2_profile_file(p)
@@ -301,4 +308,4 @@ def read_netcdf(path):
 
 
 if __name__ == "__main__":
-    run_ingest_by_id("Seaglider", read_netcdf, find_l2_file)
+    run_ingest_by_number("Seaglider", read_netcdf, find_l2_file)

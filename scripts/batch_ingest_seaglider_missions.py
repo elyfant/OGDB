@@ -14,6 +14,15 @@ product, and some missions (e.g. 001) have no timeseries file. Some
 older missions only have a 5m-gridded *5m_up_and_down_profile.nc* rather than
 the usual 1m version -- that's expected and not treated as a problem.
 
+Which mission a folder is
+-------------------------
+The folder's `NNN-` prefix is missions.mission_number -- NOT missions.id,
+which is only the surrogate primary key and diverges from mission_number for
+the newest missions (e.g. mission_number 95 is id 96). Each folder is looked
+up by mission_number and written under that row's id. The folder's glider
+code must also match the mission's glider in OGDB, or the mission is skipped:
+a folder numbered wrongly on disk must never overwrite another mission.
+
 Picking one file when several match
 ------------------------------------
 If more than one candidate matches, files under a `reprocessed_bs3`
@@ -50,7 +59,7 @@ import psycopg2
 import psycopg2.extras
 
 from ingest_seaglider_mission import is_l2_profile_file, read_netcdf
-from mission_ingest_common import _ingest_and_write
+from mission_ingest_common import _ingest_and_write, folder_mismatch, lookup_mission_by_number
 from settings import require_database_url, require_seaglider_data_root
 
 MISSION_DIR_RE = re.compile(r"^(\d+)-")
@@ -83,15 +92,15 @@ def pick_one(candidates, mission_dir):
 
 def discover_missions(data_root):
     """Yields one record per `<NNN>-*` folder directly under data_root:
-    (mission_id, mission_dir, profile_path, profile_ambiguous)."""
+    (mission_number, mission_dir, profile_path, profile_ambiguous)."""
     for mission_dir in sorted(p for p in data_root.iterdir() if p.is_dir()):
         m = MISSION_DIR_RE.match(mission_dir.name)
         if not m:
             continue
-        mission_id = int(m.group(1))
+        mission_number = int(m.group(1))
 
         profile_path, profile_ambiguous = pick_one(find_candidates(mission_dir), mission_dir)
-        yield mission_id, mission_dir, profile_path, profile_ambiguous
+        yield mission_number, mission_dir, profile_path, profile_ambiguous
 
 
 def _problem_lines(label, path, ambiguous):
@@ -106,74 +115,32 @@ def _problem_lines(label, path, ambiguous):
 
 def scan(data_root):
     """-> (ready, needs_attention). ready is a list of
-    (mission_id, mission_dir, profile_path); needs_attention
-    is a list of (mission_id, mission_dir, [problem message lines])."""
+    (mission_number, mission_dir, profile_path); needs_attention
+    is a list of (mission_number, mission_dir, [problem message lines])."""
     ready, needs_attention = [], []
-    for mission_id, mission_dir, profile_path, profile_ambi in discover_missions(data_root):
+    for mission_number, mission_dir, profile_path, profile_ambi in discover_missions(data_root):
         problems = _problem_lines("up_and_down_profile.nc", profile_path, profile_ambi)
         if problems:
-            needs_attention.append((mission_id, mission_dir, problems))
+            needs_attention.append((mission_number, mission_dir, problems))
         else:
-            ready.append((mission_id, mission_dir, profile_path))
+            ready.append((mission_number, mission_dir, profile_path))
     return ready, needs_attention
 
 
 def print_report(data_root, ready, needs_attention):
     print(f"Scanned {data_root}")
     print(f"\n{len(ready)} mission(s) ready:")
-    for mission_id, mission_dir, profile_path in ready:
-        print(f"  {mission_id:03d}  {mission_dir.name}")
+    for mission_number, mission_dir, profile_path in ready:
+        print(f"  {mission_number:03d}  {mission_dir.name}")
         print(f"      profile:    {profile_path}")
 
     if needs_attention:
         print(f"\n{len(needs_attention)} mission(s) need attention (skipped):")
-        for mission_id, mission_dir, problems in needs_attention:
-            print(f"  {mission_id:03d}  {mission_dir.name}")
+        for mission_number, mission_dir, problems in needs_attention:
+            print(f"  {mission_number:03d}  {mission_dir.name}")
             for line in problems:
                 print(f"      {line}")
     print()
-
-
-def resolve_std_mission_name(cur, mission_id, folder_name):
-    """Resolve mission_id to its std_mission_name, cross-checked against the
-    mission folder's own glider code.
-
-    missions.id is ONE sequence shared across every platform (Seaglider and
-    Slocum interleaved chronologically -- e.g. id 97 is a Slocum mission).
-    The Seaglider data folders' `NNN-` counter is a separate, Seaglider-only
-    sequence that happens to track missions.id exactly for older missions,
-    but was found to diverge for the newest ones (folders 097/098/100/101 do
-    not point at their own mission's real id -- see dependencies.md).
-    Trusting the folder number blindly risks silently overwriting a
-    *different* mission's data under the same id, so this refuses rather
-    than guesses on any glider-code mismatch between the folder and the row.
-
-    Returns (std_name, problem). problem is None when it's safe to ingest;
-    otherwise std_name is None and problem explains why.
-    """
-    cur.execute(
-        """
-        SELECT nm.std_mission_name
-        FROM norglider_missions nm
-        JOIN missions m ON m.id = nm.id
-        WHERE nm.id = %s
-        """,
-        (mission_id,),
-    )
-    row = cur.fetchone()
-    if not row or not row["std_mission_name"]:
-        return None, "no resolvable std_mission_name at this id"
-
-    db_name = row["std_mission_name"]
-    folder_glider = folder_name.split("-", 1)[1].split("_")[0].lower() if "-" in folder_name else ""
-    db_glider = db_name.split("_")[0].lower()
-    if folder_glider != db_glider:
-        return None, (
-            f"glider mismatch -- id={mission_id} in OGDB is actually {db_name!r}, "
-            "not this folder's mission. The folder's NNN- number is not this "
-            "mission's real OGDB id; resolve manually."
-        )
-    return db_name, None
 
 
 def ingest_ready_missions(ready, commit):
@@ -184,22 +151,30 @@ def ingest_ready_missions(ready, commit):
     succeeded, skipped, failed = [], [], []
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            for mission_id, mission_dir, profile_path in ready:
-                std_name, problem = resolve_std_mission_name(cur, mission_id, mission_dir.name)
+            for mission_number, mission_dir, profile_path in ready:
+                # The folder's NNN- prefix is missions.mission_number, not
+                # missions.id (the PK, which diverges for the newest missions).
+                # Writes go to row["id"].
+                row = lookup_mission_by_number(cur, mission_number)
+                if not row:
+                    problem = f"no mission with mission_number = {mission_number} in OGDB"
+                else:
+                    problem = folder_mismatch(mission_number, mission_dir.name, row)
                 if problem:
-                    skipped.append((mission_id, mission_dir, problem))
-                    print(f"{mission_id:03d}  {mission_dir.name}: {problem} -- skipped")
+                    skipped.append((mission_number, mission_dir, problem))
+                    print(f"{mission_number:03d}  {mission_dir.name}: {problem} -- skipped")
                     continue
 
                 try:
+                    std_name = row["std_mission_name"] or f"(mission_number {mission_number}, no std name yet)"
                     _ingest_and_write(
-                        cur, conn, "Seaglider", mission_id, std_name, str(profile_path), read_netcdf, commit
+                        cur, conn, "Seaglider", row["id"], std_name, str(profile_path), read_netcdf, commit
                     )
-                    succeeded.append((mission_id, mission_dir))
+                    succeeded.append((mission_number, mission_dir))
                 except Exception as exc:
                     conn.rollback()
-                    failed.append((mission_id, mission_dir, exc))
-                    print(f"{mission_id:03d}  {mission_dir.name}: ERROR -- {exc} (rolled back, continuing)")
+                    failed.append((mission_number, mission_dir, exc))
+                    print(f"{mission_number:03d}  {mission_dir.name}: ERROR -- {exc} (rolled back, continuing)")
     finally:
         conn.close()
     return succeeded, skipped, failed
