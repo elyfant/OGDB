@@ -9,6 +9,27 @@ for mission/glider metadata, consumed by `OGDB-portal`,
 See `webapp-roadmap.md` and `alembic/design-notes.md` / `alembic/erd.md`
 for schema design notes.
 
+## Configuring `scripts/`
+
+The ingest/backfill/sync scripts in `scripts/` need a `DATABASE_URL`, and
+`ingest_seaglider_mission.py` needs a Seaglider data root. These are read by
+`scripts/settings.py`, in order of precedence:
+
+1. environment variables (`DATABASE_URL`, `SEAGLIDER_DATA_ROOT`)
+2. `config/ogdb_scripts.local.toml` (gitignored, per-machine)
+3. `config/ogdb_scripts.toml` (committed default)
+
+For a one-off run, setting the environment variable inline is easiest:
+
+```bash
+DATABASE_URL=postgresql://... python scripts/sync_nvs_terms.py
+```
+
+To avoid repeating that, copy `config/ogdb_scripts.local.example.toml` to
+`config/ogdb_scripts.local.toml` and fill in your own values -- this is the
+recommended path on Windows, or for a different group's data mount, since it
+needs no shell-profile setup and works the same on every OS.
+
 ## Cross-project context: norgliders (facility planning)
 
 `~/projects/norgliders` holds the facility-wide system map, open

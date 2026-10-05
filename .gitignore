@@ -12,6 +12,7 @@ env/
 .env
 .env.*
 *.env
+config/ogdb_scripts.local.toml
 
 # IDE
 .vscode/

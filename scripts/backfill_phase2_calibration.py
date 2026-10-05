@@ -20,15 +20,17 @@ check was accidentally nested inside `if commit:`; this script is
 structured to avoid repeating that.
 
 Usage:
+    (DATABASE_URL can also be set once in config/ogdb_scripts.local.toml --
+    see scripts/settings.py)
     DATABASE_URL=postgresql://... python scripts/backfill_phase2_calibration.py            # dry run
     DATABASE_URL=postgresql://... python scripts/backfill_phase2_calibration.py --commit    # real run
 """
 import argparse
-import os
-import sys
 
 import psycopg2
 import psycopg2.extras
+
+from settings import require_database_url
 
 CAL_SPECS = [
     {
@@ -170,9 +172,7 @@ def main():
     parser.add_argument("--commit", action="store_true", help="Actually write. Default is dry-run.")
     args = parser.parse_args()
 
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        sys.exit("DATABASE_URL environment variable not set")
+    database_url = require_database_url()
 
     conn = psycopg2.connect(database_url)
     conn.autocommit = False

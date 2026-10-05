@@ -16,6 +16,8 @@ entirely relevant to gliders, unlike e.g. L05/L22's 800+ mostly-irrelevant
 terms, so mirrored in full via fetch_collection() rather than hand-listed).
 
 Usage:
+    (DATABASE_URL can also be set once in config/ogdb_scripts.local.toml --
+    see scripts/settings.py)
     DATABASE_URL=postgresql://user:pass@host:port/dbname python scripts/sync_nvs_terms.py
     python scripts/sync_nvs_terms.py --dry-run   # fetch and print only, no DB writes
 
@@ -23,11 +25,12 @@ Requires: requests, psycopg2-binary, PyYAML — see scripts/requirements.txt
 """
 import argparse
 import os
-import sys
 
 import psycopg2
 import requests
 import yaml
+
+from settings import load_settings, require_database_url
 
 MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "nvs_terms.yaml")
 NVS_ACCEPT_HEADER = "application/ld+json"
@@ -132,9 +135,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Fetch and print, don't write to the DB")
     args = parser.parse_args()
 
-    database_url = os.environ.get("DATABASE_URL")
-    if not args.dry_run and not database_url:
-        sys.exit("DATABASE_URL environment variable not set (required unless --dry-run)")
+    database_url = require_database_url() if not args.dry_run else load_settings().database_url
 
     uris, collections = load_manifest()
     if not uris and not collections:

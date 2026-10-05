@@ -80,16 +80,18 @@ Behavior, by design:
   set makes the dry run untrustworthy).
 
 Usage:
+    (DATABASE_URL can also be set once in config/ogdb_scripts.local.toml --
+    see scripts/settings.py)
     DATABASE_URL=postgresql://... python scripts/build_glider_assignments.py scripts/glider_builds/durin.yaml
     DATABASE_URL=postgresql://... python scripts/build_glider_assignments.py scripts/glider_builds/durin.yaml --commit
 """
 import argparse
-import os
-import sys
 
 import psycopg2
 import psycopg2.extras
 import yaml
+
+from settings import require_database_url
 
 # asset_types.name -> detail table name. Types with no distinguishing
 # attributes beyond the generic assets columns have no entry here
@@ -405,9 +407,7 @@ def main():
     parser.add_argument("--commit", action="store_true", help="Actually write. Default is dry-run.")
     args = parser.parse_args()
 
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        sys.exit("DATABASE_URL environment variable not set")
+    database_url = require_database_url()
 
     with open(args.worksheet) as f:
         worksheet = yaml.safe_load(f)

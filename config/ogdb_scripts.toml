@@ -1,0 +1,25 @@
+# Environment configuration for the scripts in scripts/ (ingest, backfill,
+# sync, etc).
+#
+# This is the committed default. To override on a particular machine -- a
+# different OS, a different group's data mount, a personal DB connection --
+# create `config/ogdb_scripts.local.toml` (gitignored) with just the keys you
+# want to change; see config/ogdb_scripts.local.example.toml. Environment
+# variables win over both files:
+#   DATABASE_URL          -> [database].url
+#   SEAGLIDER_DATA_ROOT   -> [paths].seaglider_data_root
+#
+# Loaded by scripts/settings.py::load_settings().
+
+[database]
+# No working default is committed here (this repo is public) -- set your own
+# in config/ogdb_scripts.local.toml or $DATABASE_URL, e.g.:
+#   postgresql://<user>:<password>@localhost:<port>/ogdb
+url = ""
+
+[paths]
+# Base directory holding the per-mission Seaglider data folders (<NNN>-<name>/),
+# read by ingest_seaglider_mission.py. The Bergen facility default below is a
+# Linux NFS mount -- Windows users and other groups must override it in
+# config/ogdb_scripts.local.toml or $SEAGLIDER_DATA_ROOT.
+seaglider_data_root = "/Data/gfi/projects/naco/data/delayed"

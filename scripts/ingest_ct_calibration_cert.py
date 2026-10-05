@@ -38,6 +38,8 @@ Each cert produces, per --commit:
 Dry-run by default, same discipline as the other backfill scripts.
 
 Usage:
+    (DATABASE_URL can also be set once in config/ogdb_scripts.local.toml --
+    see scripts/settings.py)
     DATABASE_URL=postgresql://... python scripts/ingest_ct_calibration_cert.py CERT.pdf [CERT2.pdf ...]
     DATABASE_URL=postgresql://... python scripts/ingest_ct_calibration_cert.py --commit CERT.pdf
 
@@ -46,7 +48,6 @@ binary (poppler-utils) on PATH -- deliberately not a Python PDF library,
 to avoid adding a new pip dependency for what's just text extraction.
 """
 import argparse
-import os
 import re
 import shutil
 import subprocess
@@ -56,6 +57,8 @@ from pathlib import Path
 
 import psycopg2
 import psycopg2.extras
+
+from settings import require_database_url
 
 # Cert section header text (case-insensitive) -> our nvs_terms.uri.
 # Add to this as new vendor model strings show up in real certs.
@@ -351,9 +354,7 @@ def main() -> None:
     parser.add_argument("--commit", action="store_true", help="Actually write. Default is dry-run.")
     args = parser.parse_args()
 
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        sys.exit("DATABASE_URL environment variable not set")
+    database_url = require_database_url()
 
     conn = psycopg2.connect(database_url)
     conn.autocommit = False

@@ -34,15 +34,17 @@ Dry-run by default. All warning/lookup logic runs unconditionally, not
 gated on --commit (the lesson from Phase 1).
 
 Usage:
+    (DATABASE_URL can also be set once in config/ogdb_scripts.local.toml --
+    see scripts/settings.py)
     DATABASE_URL=postgresql://... python scripts/backfill_phase3_assignments.py            # dry run
     DATABASE_URL=postgresql://... python scripts/backfill_phase3_assignments.py --commit    # real run
 """
 import argparse
-import os
-import sys
 
 import psycopg2
 import psycopg2.extras
+
+from settings import require_database_url
 
 # Slocum slots that resolve directly via legacy_asset_id_map (no
 # intermediate cal-table hop). (column_on_deployment_config_slocum,
@@ -485,9 +487,7 @@ def main():
     parser.add_argument("--commit", action="store_true", help="Actually write. Default is dry-run.")
     args = parser.parse_args()
 
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        sys.exit("DATABASE_URL environment variable not set")
+    database_url = require_database_url()
 
     conn = psycopg2.connect(database_url)
     conn.autocommit = False
