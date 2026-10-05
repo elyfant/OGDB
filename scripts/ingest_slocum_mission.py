@@ -35,7 +35,8 @@ What it does
    temperature, salinity from the shallowest finite bin of that profile.
    dacu / dacv are NULL -- the pyglider L2 grid carries no depth-average
    current.
-3. Overwrites those missions columns and UPSERTs the track, one transaction.
+3. Overwrites those missions columns and replaces the mission's whole track
+   (old points deleted, new ones inserted), one transaction.
    l1_file / l2_file untouched. Dry-run by default; --commit to write.
 
 Usage

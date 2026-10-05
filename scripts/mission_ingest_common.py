@@ -3,8 +3,8 @@
 
 Each platform script provides a `read_netcdf(path) -> (metadata, track, warnings)`
 function for its own file format and calls `run_ingest()` with it. Everything
-else -- CLI, DB lookup by std_mission_name, the missions UPDATE, the tracks
-UPSERT, the summary print, the single transaction -- lives here.
+else -- CLI, DB lookup, the missions UPDATE, replacing the mission's track,
+the summary print, the single transaction -- lives here.
 
 `metadata` is a dict with exactly the keys in MISSION_METADATA_COLUMNS.
 `track` is a list of dicts: latitude, longitude, utc (tz-aware UTC datetime),
@@ -96,7 +96,7 @@ def dedupe_track_by_utc(track):
     Some Seaglider basestation output repeats the same start_time across
     several consecutive down casts near the end of a mission (observed on
     missions 007/008 -- looks like a basestation artifact, not a reading
-    error). Repeated utc values break the tracks(missions_id, utc) upsert.
+    error). tracks is UNIQUE on (missions_id, utc), so repeats can't be stored.
 
     Returns (deduped_track, n_dropped).
     """
@@ -211,8 +211,26 @@ def update_mission(cur, mission_id, metadata):
     return cur.rowcount
 
 
-def upsert_tracks(cur, mission_id, track):
+def replace_tracks(cur, mission_id, track):
+    """Replace the mission's whole surface track with `track`.
+
+    Deletes every existing tracks row for the mission, then inserts the new
+    set -- so after an ingest the track is exactly what the ingested file
+    holds. An upsert alone (the previous behaviour) only overwrote points
+    with a matching utc and left the rest: re-ingesting from a different
+    file (e.g. a reprocessed 1m product replacing the 5m one) would have
+    left the old file's points mixed in. Runs inside the caller's
+    transaction, so a failure rolls back to the old track, never to none.
+
+    Only the ingest scripts write tracks (OGDB-portal reads it, nothing
+    references tracks rows), so the DELETE can't orphan anything.
+
+    Returns (n_deleted, n_written).
+    """
     from psycopg2.extras import execute_values
+
+    cur.execute("DELETE FROM tracks WHERE missions_id = %s", (mission_id,))
+    n_deleted = cur.rowcount
 
     rows = [
         (
@@ -228,7 +246,9 @@ def upsert_tracks(cur, mission_id, track):
         for p in track
     ]
     # tracks.geom is filled by the trg_set_geom BEFORE trigger from lat/lon.
-    # ON CONFLICT target is the unique constraint on (missions_id, utc).
+    # The mission's rows were just deleted, so ON CONFLICT only fires for a
+    # repeated utc within this track itself (last one wins) -- kept so a
+    # platform reader that doesn't dedupe can't fail the insert.
     execute_values(
         cur,
         """
@@ -245,7 +265,7 @@ def upsert_tracks(cur, mission_id, track):
         """,
         rows,
     )
-    return len(rows)
+    return n_deleted, len(rows)
 
 
 # ---------------------------------------------------------------------
@@ -284,9 +304,9 @@ def _ingest_and_write(cur, conn, kind, mission_id, std_name, l2_path, read_netcd
     print_summary(kind, std_name, l2_path, metadata, track, warnings)
 
     updated = update_mission(cur, mission_id, metadata)
-    n_tracks = upsert_tracks(cur, mission_id, track)
+    n_deleted, n_written = replace_tracks(cur, mission_id, track)
     print(f"missions rows updated: {updated}")
-    print(f"tracks rows upserted:  {n_tracks}")
+    print(f"tracks rows replaced:  {n_deleted} old deleted, {n_written} written")
 
     if commit:
         conn.commit()

@@ -66,7 +66,8 @@ What it does
    latitude, longitude, utc, temperature, salinity (shallowest finite bin),
    dacu, dacv. A final row is appended for the last surfacing so the track
    reaches the recovery position.
-3. Overwrites those missions columns and UPSERTs the track, one transaction.
+3. Overwrites those missions columns and replaces the mission's whole track
+   (old points deleted, new ones inserted), one transaction.
    l1_file / l2_file untouched. Dry-run by default; --commit to write.
 
 Usage
