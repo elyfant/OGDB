@@ -4,19 +4,19 @@
 Scans the configured Seaglider data root (see config/ogdb_scripts.toml /
 scripts/settings.py -- $SEAGLIDER_DATA_ROOT overrides both files) for mission
 folders (`<NNN>-<name>/`, the convention shared with ingest_seaglider_mission.py
-and norgliders/decisions/0003) and, for each one, locates:
+and norgliders/decisions/0003) and, for each one, locates the L2 profile
+product, *up_and_down_profile.nc. The name must END in profile.nc -- e.g.
+`_profile-ihe.nc` copies are never read.
 
-  - the L2 profile product:  *up_and_down_profile.nc  (name must END in
-    profile.nc -- e.g. `_profile-ihe.nc` copies are never read)
-  - the raw timeseries:      *timeseries*.nc
-
-Both must resolve to exactly one file before a mission is ingested. Some
+It must resolve to exactly one file before a mission is ingested. The
+*timeseries.nc file is not required: the ingest reads only the profile
+product, and some missions (e.g. 001) have no timeseries file. Some
 older missions only have a 5m-gridded *5m_up_and_down_profile.nc* rather than
 the usual 1m version -- that's expected and not treated as a problem.
 
 Picking one file when several match
 ------------------------------------
-If more than one candidate matches a pattern, files under a `reprocessed_bs3`
+If more than one candidate matches, files under a `reprocessed_bs3`
 folder are preferred over anything else (including `reprocessed_bs3_old`,
 which gets no special treatment -- it's just not preferred). If that still
 leaves more than one candidate, this script does NOT guess: it reports every
@@ -54,17 +54,11 @@ from mission_ingest_common import _ingest_and_write
 from settings import require_database_url, require_seaglider_data_root
 
 MISSION_DIR_RE = re.compile(r"^(\d+)-")
-PROFILE_PATTERN = "up_and_down_profile"
-TIMESERIES_PATTERN = "timeseries"
 PREFERRED_DIR = "reprocessed_bs3"
 
 
-def find_candidates(mission_dir, pattern, exclude_pattern):
-    return sorted(
-        p
-        for p in mission_dir.rglob("*.nc")
-        if pattern in p.name.lower() and exclude_pattern not in p.name.lower()
-    )
+def find_candidates(mission_dir):
+    return sorted(p for p in mission_dir.rglob("*.nc") if is_l2_profile_file(p))
 
 
 def _tier(path, mission_dir):
@@ -89,30 +83,15 @@ def pick_one(candidates, mission_dir):
 
 def discover_missions(data_root):
     """Yields one record per `<NNN>-*` folder directly under data_root:
-    (mission_id, mission_dir, profile_path, profile_ambiguous,
-     timeseries_path, timeseries_ambiguous)."""
+    (mission_id, mission_dir, profile_path, profile_ambiguous)."""
     for mission_dir in sorted(p for p in data_root.iterdir() if p.is_dir()):
         m = MISSION_DIR_RE.match(mission_dir.name)
         if not m:
             continue
         mission_id = int(m.group(1))
 
-        profile_candidates = [
-            p for p in find_candidates(mission_dir, PROFILE_PATTERN, TIMESERIES_PATTERN)
-            if is_l2_profile_file(p)
-        ]
-        timeseries_candidates = find_candidates(mission_dir, TIMESERIES_PATTERN, PROFILE_PATTERN)
-        profile_path, profile_ambiguous = pick_one(profile_candidates, mission_dir)
-        timeseries_path, timeseries_ambiguous = pick_one(timeseries_candidates, mission_dir)
-
-        yield (
-            mission_id,
-            mission_dir,
-            profile_path,
-            profile_ambiguous,
-            timeseries_path,
-            timeseries_ambiguous,
-        )
+        profile_path, profile_ambiguous = pick_one(find_candidates(mission_dir), mission_dir)
+        yield mission_id, mission_dir, profile_path, profile_ambiguous
 
 
 def _problem_lines(label, path, ambiguous):
@@ -127,26 +106,24 @@ def _problem_lines(label, path, ambiguous):
 
 def scan(data_root):
     """-> (ready, needs_attention). ready is a list of
-    (mission_id, mission_dir, profile_path, timeseries_path); needs_attention
+    (mission_id, mission_dir, profile_path); needs_attention
     is a list of (mission_id, mission_dir, [problem message lines])."""
     ready, needs_attention = [], []
-    for mission_id, mission_dir, profile_path, profile_ambi, ts_path, ts_ambi in discover_missions(data_root):
+    for mission_id, mission_dir, profile_path, profile_ambi in discover_missions(data_root):
         problems = _problem_lines("up_and_down_profile.nc", profile_path, profile_ambi)
-        problems += _problem_lines("timeseries.nc", ts_path, ts_ambi)
         if problems:
             needs_attention.append((mission_id, mission_dir, problems))
         else:
-            ready.append((mission_id, mission_dir, profile_path, ts_path))
+            ready.append((mission_id, mission_dir, profile_path))
     return ready, needs_attention
 
 
 def print_report(data_root, ready, needs_attention):
     print(f"Scanned {data_root}")
     print(f"\n{len(ready)} mission(s) ready:")
-    for mission_id, mission_dir, profile_path, ts_path in ready:
+    for mission_id, mission_dir, profile_path in ready:
         print(f"  {mission_id:03d}  {mission_dir.name}")
         print(f"      profile:    {profile_path}")
-        print(f"      timeseries: {ts_path}")
 
     if needs_attention:
         print(f"\n{len(needs_attention)} mission(s) need attention (skipped):")
@@ -207,7 +184,7 @@ def ingest_ready_missions(ready, commit):
     succeeded, skipped, failed = [], [], []
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            for mission_id, mission_dir, profile_path, _ts_path in ready:
+            for mission_id, mission_dir, profile_path in ready:
                 std_name, problem = resolve_std_mission_name(cur, mission_id, mission_dir.name)
                 if problem:
                     skipped.append((mission_id, mission_dir, problem))
