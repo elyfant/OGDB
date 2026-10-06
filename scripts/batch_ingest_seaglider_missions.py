@@ -2,7 +2,7 @@
 """Batch-ingest every Seaglider mission under the Seaglider data root into OGDB.
 
 Scans the configured Seaglider data root (see config/ogdb_scripts.toml /
-scripts/settings.py -- $SEAGLIDER_DATA_ROOT overrides both files) for mission
+scripts/settings.py -- $PROJECTS_ROOT overrides both files) for mission
 folders (`<NNN>-<name>/`, the convention shared with ingest_seaglider_mission.py
 and norgliders/decisions/0003) and, for each one, locates the L2 profile
 product, *up_and_down_profile.nc. The name must END in profile.nc -- e.g.
@@ -168,7 +168,8 @@ def ingest_ready_missions(ready, commit):
                 try:
                     std_name = row["std_mission_name"] or f"(mission_number {mission_number}, no std name yet)"
                     _ingest_and_write(
-                        cur, conn, "Seaglider", row["id"], std_name, str(profile_path), read_netcdf, commit
+                        cur, conn, "Seaglider", row["id"], std_name, str(profile_path), read_netcdf, commit,
+                        record_l2_file=True,
                     )
                     succeeded.append((mission_number, mission_dir))
                 except Exception as exc:

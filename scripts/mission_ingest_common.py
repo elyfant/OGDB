@@ -18,13 +18,14 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from settings import require_database_url
+from settings import from_stored_path, require_database_url, to_stored_path
 
 EARTH_RADIUS_KM = 6371.0088
 
 # The missions columns the ingest computes from the NetCDF and overwrites,
 # ordered for the UPDATE and the summary print. l1_file / l2_file are NOT
-# here -- l2_file is the input, l1_file is left alone.
+# here -- l1_file is left alone; l2_file is the Slocum ingest's input, and
+# the Seaglider ingest sets it separately (update_mission's l2_file).
 MISSION_METADATA_COLUMNS = [
     "launch_date",
     "launch_latitude",
@@ -214,9 +215,14 @@ def folder_mismatch(mission_number, folder_name, row):
     return None
 
 
-def update_mission(cur, mission_id, metadata):
-    set_clause = ", ".join(f"{c} = %({c})s" for c in MISSION_METADATA_COLUMNS)
+def update_mission(cur, mission_id, metadata, l2_file=None):
+    """Write the metadata columns; also missions.l2_file when given (a path
+    relative to the projects folder -- see settings.to_stored_path)."""
+    cols = list(MISSION_METADATA_COLUMNS) + (["l2_file"] if l2_file is not None else [])
+    set_clause = ", ".join(f"{c} = %({c})s" for c in cols)
     params = {c: metadata[c] for c in MISSION_METADATA_COLUMNS}
+    if l2_file is not None:
+        params["l2_file"] = l2_file
     params["id"] = mission_id
     cur.execute(
         f"UPDATE missions SET {set_clause}, updated_at = now() WHERE id = %(id)s",
@@ -311,13 +317,30 @@ def print_summary(kind, std_mission_name, path, metadata, track, warnings):
 # Runner
 # ---------------------------------------------------------------------
 
-def _ingest_and_write(cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, commit):
+def _ingest_and_write(cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, commit, record_l2_file=False):
     """Shared tail of both run_ingest() and run_ingest_by_number(): read the
-    NetCDF, print the summary, write missions + tracks, commit or roll back."""
+    NetCDF, print the summary, write missions + tracks, commit or roll back.
+
+    record_l2_file: also set missions.l2_file to the file just read, stored
+    relative to the projects folder (e.g. naco/data/delayed/095-.../
+    basestation/x.nc) -- so OGDB records which file the mission's data
+    came from, basestation or reprocessed. A file outside the projects
+    folder (an explicit --file elsewhere) is ingested but not recorded."""
     metadata, track, warnings = read_netcdf(l2_path)
+    stored_l2 = None
+    if record_l2_file:
+        try:
+            stored_l2 = to_stored_path(l2_path)
+        except ValueError:
+            warnings.append(
+                "file is outside the projects folder, so missions.l2_file is left "
+                "unchanged (it only stores paths relative to that folder)."
+            )
     print_summary(kind, std_name, l2_path, metadata, track, warnings)
 
-    updated = update_mission(cur, mission_id, metadata)
+    updated = update_mission(cur, mission_id, metadata, l2_file=stored_l2)
+    if stored_l2 is not None:
+        print(f"missions.l2_file set:  {stored_l2}")
     n_deleted, n_written = replace_tracks(cur, mission_id, track)
     print(f"missions rows updated: {updated}")
     print(f"tracks rows replaced:  {n_deleted} old deleted, {n_written} written")
@@ -366,7 +389,7 @@ def run_ingest(kind, read_netcdf):
 
             if not l2_file or not l2_file.strip():
                 sys.exit(f"Mission {std_name!r} has no l2_file set -- nothing to ingest.")
-            l2_file = l2_file.strip()
+            l2_file = str(from_stored_path(l2_file))
             if not os.path.isfile(l2_file):
                 sys.exit(f"l2_file for {std_name!r} does not exist on disk: {l2_file}")
 
@@ -424,6 +447,8 @@ def run_ingest_by_number(kind, read_netcdf, find_l2_file):
             if not os.path.isfile(l2_path):
                 sys.exit(f"L2 file does not exist on disk: {l2_path}")
 
-            _ingest_and_write(cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, args.commit)
+            _ingest_and_write(
+                cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, args.commit, record_l2_file=True
+            )
     finally:
         conn.close()

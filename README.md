@@ -12,10 +12,14 @@ for schema design notes.
 ## Configuring `scripts/`
 
 The ingest/backfill/sync scripts in `scripts/` need a `DATABASE_URL`, and
-`ingest_seaglider_mission.py` needs a Seaglider data root. These are read by
-`scripts/settings.py`, in order of precedence:
+the ingest scripts need `projects_root` -- where the shared GFI projects
+folder (the one containing `naco/` and `slocum/`) is mounted on your
+machine; the Bergen default is `/Data/gfi/projects`. File paths stored in
+OGDB (`missions.l1_file` / `l2_file`) are relative to that folder, e.g.
+`naco/data/delayed/095-.../basestation/x.nc`, so they work for everyone.
+These are read by `scripts/settings.py`, in order of precedence:
 
-1. environment variables (`DATABASE_URL`, `SEAGLIDER_DATA_ROOT`)
+1. environment variables (`DATABASE_URL`, `PROJECTS_ROOT`)
 2. `config/ogdb_scripts.local.toml` (gitignored, per-machine)
 3. `config/ogdb_scripts.toml` (committed default)
 
@@ -29,6 +33,11 @@ To avoid repeating that, copy `config/ogdb_scripts.local.example.toml` to
 `config/ogdb_scripts.local.toml` and fill in your own values -- this is the
 recommended path on Windows, or for a different group's data mount, since it
 needs no shell-profile setup and works the same on every OS.
+
+## How-to guides
+
+- [Ingest Seaglider mission data](docs/ingest-seaglider-missions.md) --
+  batch or single mission, with the backup and dry-run steps.
 
 ## Cross-project context: norgliders (facility planning)
 

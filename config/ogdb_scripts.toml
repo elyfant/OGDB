@@ -7,7 +7,7 @@
 # want to change; see config/ogdb_scripts.local.example.toml. Environment
 # variables win over both files:
 #   DATABASE_URL          -> [database].url
-#   SEAGLIDER_DATA_ROOT   -> [paths].seaglider_data_root
+#   PROJECTS_ROOT         -> [paths].projects_root
 #
 # Loaded by scripts/settings.py::load_settings().
 
@@ -18,8 +18,13 @@
 url = ""
 
 [paths]
-# Base directory holding the per-mission Seaglider data folders (<NNN>-<name>/),
-# read by ingest_seaglider_mission.py. The Bergen facility default below is a
-# Linux NFS mount -- Windows users and other groups must override it in
-# config/ogdb_scripts.local.toml or $SEAGLIDER_DATA_ROOT.
-seaglider_data_root = "/Data/gfi/projects/naco/data/delayed"
+# Where the shared GFI projects folder is mounted on this machine. The Bergen
+# facility default below is the Linux NFS mount -- Windows users and other
+# groups override it in config/ogdb_scripts.local.toml or $PROJECTS_ROOT.
+# File paths stored in OGDB (missions.l1_file / l2_file) are relative to this
+# folder, e.g. naco/data/delayed/095-.../basestation/x.nc.
+projects_root = "/Data/gfi/projects"
+
+# The Seaglider per-mission data folders (<NNN>-<name>/), relative to
+# projects_root. The same for everyone -- normally not overridden.
+seaglider_data_dir = "naco/data/delayed"

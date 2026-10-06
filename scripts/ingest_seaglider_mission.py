@@ -34,9 +34,10 @@ which diverges from mission_number for the newest missions).
 Finding the file
 ----------------
 Unlike ingest_slocum_mission.py, this script does NOT read missions.l2_file --
-that column is frequently stale for Seaglider missions. Instead it locates the
-file itself under the configured Seaglider data root (see
-config/ogdb_scripts.toml / scripts/settings.py -- $SEAGLIDER_DATA_ROOT
+that column was mostly empty or stale for Seaglider missions. Instead it
+locates the file itself, then records it in l2_file, under the configured
+Seaglider data root, <projects_root>/naco/data/delayed (see
+config/ogdb_scripts.toml / scripts/settings.py -- $PROJECTS_ROOT
 overrides both files):
 
 1. glob `<data-root>/<NNN>-*` for the mission folder (NNN = mission_number,
@@ -67,8 +68,10 @@ What it does
    dacu, dacv. A final row is appended for the last surfacing so the track
    reaches the recovery position.
 3. Overwrites those missions columns and replaces the mission's whole track
-   (old points deleted, new ones inserted), one transaction.
-   l1_file / l2_file untouched. Dry-run by default; --commit to write.
+   (old points deleted, new ones inserted), one transaction. Also sets
+   missions.l2_file to the file it read, relative to the projects folder
+   (e.g. naco/data/delayed/095-.../basestation/x.nc). l1_file untouched.
+   Dry-run by default; --commit to write.
 
 Usage
 -----
@@ -112,8 +115,8 @@ def find_l2_file(mission_number, row):
     if not mission_dirs:
         sys.exit(
             f"No mission folder matching {data_root}/{mission_glob}. "
-            "Check [paths].seaglider_data_root in config/ogdb_scripts.local.toml "
-            "or $SEAGLIDER_DATA_ROOT."
+            "Check [paths].projects_root in config/ogdb_scripts.local.toml "
+            "or $PROJECTS_ROOT."
         )
     if len(mission_dirs) > 1:
         listing = "\n  ".join(str(d) for d in mission_dirs)

@@ -822,13 +822,16 @@ answers a different question, and only one of them is *the* identifier:
 |---|---|---|---|
 | `missions.id` | surrogate primary key, no meaning | never | foreign keys only (tracks, documents, asset_assignments, ...) |
 | `missions.mission_number` | **the facility's mission identifier** (NOT NULL, UNIQUE, one counter across Slocum + Seaglider) | never -- not reassigned, even when a recovered mission is appended out of chronological order | everything people and scripts use to find a mission; the `NNN-` prefix of every mission data folder |
-| `norglider_missions.std_mission_name` | computed label, `glider_project_site_monYYYY`, all lower case | yes, automatically, whenever glider/project/site/launch_date is corrected | display |
-| `missions.mission_name` | historical label, the name the mission was known by at the time | rarely | finding old files, papers, cruise reports |
+| `norglider_missions.std_mission_name` | **the name the team uses** for a mission; computed, `glider_project_site_monYYYY`, all lower case | yes, automatically, whenever glider/project/site/launch_date is corrected | referring to missions; naming mission data folders, `<mission_number:03d>-<std_mission_name>/` |
+| `missions.mission_name` | historical label, the name the mission was known by at the time; set once at create, never overwritten on edit | no | finding old files, papers, cruise reports |
 
 Rules:
 - Scripts look missions up by `mission_number` and write under the row's
   `id`. Never treat a folder's `NNN-` prefix as `missions.id` -- the two
   diverge from mission_number 95 on (95 is id 96).
+- Data folders are named after `std_mission_name`, but scripts find them
+  by the `NNN-` prefix only: the computed name moves when a field is
+  corrected, and the folder name doesn't follow it.
 - Never look a mission up by either name. Names describe the mission, and
   descriptions get corrected: folder 098 says `jan2026` but its launch date
   is 3 Feb, so its computed name is `..._feb2026`. In dev, `mission_name`
@@ -849,6 +852,33 @@ any UPDATE that changes `mission_number`. Writing the same value back (as
 OGDB-portal's edit-mission save does) still works. For a genuine
 correction: `BEGIN; SET LOCAL ogdb.allow_mission_number_change = 'on';
 UPDATE ...; COMMIT;` -- and rename the data folder to match.
+
+## Mission file paths are relative to the projects folder (2026-10-06)
+
+`missions.l1_file` / `l2_file` store the path **inside the shared GFI
+projects folder**, e.g. `naco/data/delayed/095-.../basestation/x.nc` or
+`slocum/data/delayed/028-.../process/..._L2_OG1.nc` -- never one machine's
+absolute path. Where that folder is mounted is per-machine config
+(`[paths].projects_root` in `config/ogdb_scripts*.toml`, default
+`/Data/gfi/projects`); `scripts/settings.py` converts both ways
+(`to_stored_path` / `from_stored_path`). Rule: store what's true for
+everyone, configure what's true per machine.
+
+Enforced by `ck_missions_l1_file_relative` / `ck_missions_l2_file_relative`
+(`xxxx_mission_file_paths_relative`): NULL or a clean relative path -- no
+leading `/` or `\`, no drive letter, no surrounding whitespace, not empty.
+The relative path keeps what matters, e.g. whether a Seaglider file is the
+`basestation/` or a `reprocessed_bs3/` product.
+
+The Seaglider ingest sets `l2_file` to the file it read. Known gap: the
+Slocum `l2_file` values (5 missions) point at `pyglider/L2/` / `pyglider/OG1/`
+locations that no longer exist -- mission 028's file is in `process/`.
+
+`missions.internal_data_path` was renamed `sg_data_file_name`
+(`xxxx_rename_internal_data_path`) -- it holds the Seaglider data file
+name, not a folder path. Nothing read the old name. Considered and deferred: a `data_locations` table (location name
+-> per-machine mount) -- worth it once data spans more than one share or
+server; `naco/...` and `slocum/...` are effectively location names already.
 
 ## How I (Fiona) like to work — see also `~/.claude/CLAUDE.md`
 

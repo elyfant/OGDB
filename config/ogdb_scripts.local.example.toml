@@ -1,7 +1,7 @@
 # Template for config/ogdb_scripts.local.toml (gitignored, per-machine).
 # Copy this file to ogdb_scripts.local.toml and fill in only the keys you
 # need to override -- anything you omit falls back to config/ogdb_scripts.toml.
-# $DATABASE_URL / $SEAGLIDER_DATA_ROOT in the environment win over both
+# $DATABASE_URL / $PROJECTS_ROOT in the environment win over both
 # files. See scripts/settings.py for the precedence.
 
 [database]
@@ -13,6 +13,6 @@ url = "postgresql://<user>:<password>@localhost:<port>/ogdb"
 # url = "postgresql://<user>@localhost:5555/ogdb"
 
 [paths]
-# Point this at wherever your machine/group mounts the Seaglider data --
-# e.g. a Windows drive letter, or a different group's share:
-# seaglider_data_root = "D:/gfi/projects/naco/data/delayed"
+# Where the shared GFI projects folder (the one containing naco/ and slocum/)
+# is mounted on this machine, e.g. a Windows drive letter:
+# projects_root = "G:/gfi/projects"
