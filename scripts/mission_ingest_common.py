@@ -215,14 +215,15 @@ def folder_mismatch(mission_number, folder_name, row):
     return None
 
 
-def update_mission(cur, mission_id, metadata, l2_file=None):
-    """Write the metadata columns; also missions.l2_file when given (a path
-    relative to the projects folder -- see settings.to_stored_path)."""
-    cols = list(MISSION_METADATA_COLUMNS) + (["l2_file"] if l2_file is not None else [])
+def update_mission(cur, mission_id, metadata, l2_file=None, l1_file=None):
+    """Write the metadata columns; also missions.l2_file / l1_file when given
+    (paths relative to the projects folder -- see settings.to_stored_path).
+    A file path left as None is not touched."""
+    files = {c: v for c, v in (("l2_file", l2_file), ("l1_file", l1_file)) if v is not None}
+    cols = list(MISSION_METADATA_COLUMNS) + list(files)
     set_clause = ", ".join(f"{c} = %({c})s" for c in cols)
     params = {c: metadata[c] for c in MISSION_METADATA_COLUMNS}
-    if l2_file is not None:
-        params["l2_file"] = l2_file
+    params.update(files)
     params["id"] = mission_id
     cur.execute(
         f"UPDATE missions SET {set_clause}, updated_at = now() WHERE id = %(id)s",
@@ -317,7 +318,9 @@ def print_summary(kind, std_mission_name, path, metadata, track, warnings):
 # Runner
 # ---------------------------------------------------------------------
 
-def _ingest_and_write(cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, commit, record_l2_file=False):
+def _ingest_and_write(
+    cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, commit, record_l2_file=False, find_l1_file=None
+):
     """Shared tail of both run_ingest() and run_ingest_by_number(): read the
     NetCDF, print the summary, write missions + tracks, commit or roll back.
 
@@ -325,22 +328,35 @@ def _ingest_and_write(cur, conn, kind, mission_id, std_name, l2_path, read_netcd
     relative to the projects folder (e.g. naco/data/delayed/095-.../
     basestation/x.nc) -- so OGDB records which file the mission's data
     came from, basestation or reprocessed. A file outside the projects
-    folder (an explicit --file elsewhere) is ingested but not recorded."""
+    folder (an explicit --file elsewhere) is ingested but not recorded.
+
+    find_l1_file(l2_path) -> (l1_path or None, note or None): when given
+    and the L2 file was recorded, also record missions.l1_file. No L1 file
+    is fine -- l1_file is just left unchanged and the note says why."""
     metadata, track, warnings = read_netcdf(l2_path)
-    stored_l2 = None
+    stored_l2 = stored_l1 = None
     if record_l2_file:
         try:
             stored_l2 = to_stored_path(l2_path)
         except ValueError:
             warnings.append(
-                "file is outside the projects folder, so missions.l2_file is left "
-                "unchanged (it only stores paths relative to that folder)."
+                "file is outside the projects folder, so missions.l2_file / l1_file are "
+                "left unchanged (they only store paths relative to that folder)."
             )
+    l1_note = None
+    if stored_l2 is not None and find_l1_file is not None:
+        l1_path, l1_note = find_l1_file(l2_path)
+        if l1_path is not None:
+            stored_l1 = to_stored_path(l1_path)
     print_summary(kind, std_name, l2_path, metadata, track, warnings)
 
-    updated = update_mission(cur, mission_id, metadata, l2_file=stored_l2)
+    updated = update_mission(cur, mission_id, metadata, l2_file=stored_l2, l1_file=stored_l1)
     if stored_l2 is not None:
         print(f"missions.l2_file set:  {stored_l2}")
+    if stored_l1 is not None:
+        print(f"missions.l1_file set:  {stored_l1}")
+    elif l1_note:
+        print(f"missions.l1_file unchanged: {l1_note}")
     n_deleted, n_written = replace_tracks(cur, mission_id, track)
     print(f"missions rows updated: {updated}")
     print(f"tracks rows replaced:  {n_deleted} old deleted, {n_written} written")
@@ -398,7 +414,7 @@ def run_ingest(kind, read_netcdf):
         conn.close()
 
 
-def run_ingest_by_number(kind, read_netcdf, find_l2_file):
+def run_ingest_by_number(kind, read_netcdf, find_l2_file, find_l1_file=None):
     """CLI + DB flow variant that resolves the mission by its mission_number
     and locates the L2 NetCDF on disk, instead of trusting missions.l2_file.
 
@@ -448,7 +464,8 @@ def run_ingest_by_number(kind, read_netcdf, find_l2_file):
                 sys.exit(f"L2 file does not exist on disk: {l2_path}")
 
             _ingest_and_write(
-                cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, args.commit, record_l2_file=True
+                cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, args.commit,
+                record_l2_file=True, find_l1_file=find_l1_file,
             )
     finally:
         conn.close()

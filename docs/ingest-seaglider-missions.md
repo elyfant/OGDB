@@ -21,13 +21,15 @@ OGDB. Two scripts, same code path underneath:
   `naco/data/delayed/095-.../basestation/x.nc` -- so you can see whether
   the data came from `basestation/` or `reprocessed_bs3/`. It's stored
   without the `/Data/gfi/projects` part, so it's the same for everyone.
+- `missions.l1_file`: the `*timeseries.nc` in the same folder as that L2
+  file, stored the same way. Optional -- if there's none (e.g. mission
+  001), `l1_file` is left as it was and the ingest carries on.
 - `tracks`: the mission's whole surface track, one point per dive. The
   existing track is deleted and replaced, so it always matches the file
   just ingested.
 
-**Does not touch:** `missions.l1_file`, the mission number, mission name,
-glider, project, site, people, or anything outside `missions` and
-`tracks`.
+**Does not touch:** the mission number, mission name, glider, project,
+site, people, or anything outside `missions` and `tracks`.
 
 ## How it finds the data
 
@@ -41,7 +43,10 @@ glider, project, site, people, or anything outside `missions` and
    `up_and_down_profile.nc`. Copies with anything after `profile`
    (e.g. `..._profile-ihe.nc`) are never read. If there are several, the one
    in a `reprocessed_bs3` folder wins; if that still leaves more than one,
-   the mission is skipped rather than guessed. Timeseries files aren't used.
+   the mission is skipped rather than guessed.
+4. **L1 file (optional):** the one `*timeseries.nc` beside that L2 file,
+   so L1 and L2 always come from the same processing run. Only its path
+   is recorded; the data is read from the L2 file.
 
 Both basestation file layouts are read: the older one (missions 001-011)
 and the newer one (015 onwards, including all `reprocessed_bs3` files).
@@ -116,7 +121,7 @@ Same setup, backup and dry-run habit. The argument is the mission number
 ```
 `--file` picks the NetCDF explicitly and skips the folder search (and its
 glider check). A file outside the projects folder is ingested, but not
-recorded in `l2_file`.
+recorded in `l2_file` / `l1_file`.
 
 ## When a mission is skipped
 

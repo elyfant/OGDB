@@ -9,8 +9,9 @@ product, *up_and_down_profile.nc. The name must END in profile.nc -- e.g.
 `_profile-ihe.nc` copies are never read.
 
 It must resolve to exactly one file before a mission is ingested. The
-*timeseries.nc file is not required: the ingest reads only the profile
-product, and some missions (e.g. 001) have no timeseries file. Some
+*timeseries.nc (L1) file is not required: the ingest reads only the profile
+product. When there is one beside the profile file, its path is recorded
+in missions.l1_file; some missions (e.g. 001) have none. Some
 older missions only have a 5m-gridded *5m_up_and_down_profile.nc* rather than
 the usual 1m version -- that's expected and not treated as a problem.
 
@@ -58,7 +59,7 @@ from pathlib import Path
 import psycopg2
 import psycopg2.extras
 
-from ingest_seaglider_mission import is_l2_profile_file, read_netcdf
+from ingest_seaglider_mission import find_l1_file, is_l2_profile_file, read_netcdf
 from mission_ingest_common import _ingest_and_write, folder_mismatch, lookup_mission_by_number
 from settings import require_database_url, require_seaglider_data_root
 
@@ -169,7 +170,7 @@ def ingest_ready_missions(ready, commit):
                     std_name = row["std_mission_name"] or f"(mission_number {mission_number}, no std name yet)"
                     _ingest_and_write(
                         cur, conn, "Seaglider", row["id"], std_name, str(profile_path), read_netcdf, commit,
-                        record_l2_file=True,
+                        record_l2_file=True, find_l1_file=find_l1_file,
                     )
                     succeeded.append((mission_number, mission_dir))
                 except Exception as exc:

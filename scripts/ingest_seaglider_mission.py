@@ -70,7 +70,8 @@ What it does
 3. Overwrites those missions columns and replaces the mission's whole track
    (old points deleted, new ones inserted), one transaction. Also sets
    missions.l2_file to the file it read, relative to the projects folder
-   (e.g. naco/data/delayed/095-.../basestation/x.nc). l1_file untouched.
+   (e.g. naco/data/delayed/095-.../basestation/x.nc), and missions.l1_file
+   to the *timeseries.nc beside it when there is one (else left unchanged).
    Dry-run by default; --commit to write.
 
 Usage
@@ -106,6 +107,22 @@ def is_l2_profile_file(path):
     (either bin size, e.g. 1.0m / 5.0m). Anything with a suffix after
     `profile` (e.g. `_profile-ihe.nc`) is a derived copy and never read."""
     return path.name.lower().endswith("up_and_down_profile.nc")
+
+
+def find_l1_file(l2_path):
+    """The mission's L1 product: the basestation *timeseries.nc in the SAME
+    folder as the L2 file that was read -- so L1 and L2 always come from the
+    same processing run (basestation/ vs reprocessed_bs3/). Optional: some
+    missions (e.g. 001) have none.
+
+    -> (path or None, note or None)."""
+    folder = Path(l2_path).parent
+    found = sorted(p for p in folder.iterdir() if p.is_file() and p.name.lower().endswith("timeseries.nc"))
+    if len(found) == 1:
+        return found[0], None
+    if not found:
+        return None, "no *timeseries.nc beside the L2 file"
+    return None, f"{len(found)} *timeseries.nc files beside the L2 file, refusing to guess"
 
 
 def find_l2_file(mission_number, row):
@@ -318,4 +335,4 @@ def read_netcdf(path):
 
 
 if __name__ == "__main__":
-    run_ingest_by_number("Seaglider", read_netcdf, find_l2_file)
+    run_ingest_by_number("Seaglider", read_netcdf, find_l2_file, find_l1_file)
