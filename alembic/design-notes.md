@@ -916,6 +916,23 @@ the same stage (editing notes mustn't make files vanish); a first
 done on that same reprocessed dataset. The portal no longer reads or writes
 `missions.l1_file` / `l2_file` -- the mission page shows `mission_best_files`.
 
+## What's on ERDDAP is linked to the exact file (2026-10-07)
+
+ERDDAP gets the best file currently available for a mission -- including
+the `BASESTATION` product until a reprocessed one exists, which then
+replaces it. Each `erddap_pushes` row (`xxxx_erddap_pushes_linked_to_runs`)
+links to the processing run whose file was sent (`processing_run_id`), so
+the live internal file is a join away -- not a second copy of the path.
+`trg_erddap_push_matches_run` enforces that the run is the same mission's,
+its stage equals the push status, and it has a file for the level (a CHECK
+can't see another table). `mission_erddap_status` shows, per mission and
+level, live vs best and `is_current` -- false means re-push.
+
+On the ERDDAP server the file is stored under a fixed name per mission and
+level (`<mission_slug>_<level>.nc`, see norgliders-ERDDAP `ingest/ingest.py`),
+so a better file replaces the old one atomically instead of sitting next to
+it.
+
 ## How I (Fiona) like to work — see also `~/.claude/CLAUDE.md`
 
 Explain reasoning, not just implementation. For architecture decisions, give
