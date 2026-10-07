@@ -232,6 +232,47 @@ def update_mission(cur, mission_id, metadata, l2_file=None, l1_file=None):
     return cur.rowcount
 
 
+def record_processing_run(cur, mission_id, stage, package_name, l1_file, l2_file, occurred_at, note):
+    """Record the NetCDF files as a processing run (dataset_processing_stages)
+    -- where OGDB keeps file paths per run, and from which the
+    mission_best_files view computes each mission's best L1/L2.
+
+    Idempotent: if any run of this mission already has this l2_file, nothing
+    new is added (re-ingesting the same file must not grow the history); a
+    missing l1_file on that run is filled in. Otherwise a new completed run
+    is appended. Creates the mission's dataset_processing row if needed.
+
+    Returns a one-line description of what happened, for the summary."""
+    cur.execute(
+        "INSERT INTO dataset_processing (mission_id) VALUES (%s) ON CONFLICT (mission_id) DO NOTHING",
+        (mission_id,),
+    )
+    cur.execute("SELECT id FROM dataset_processing WHERE mission_id = %s", (mission_id,))
+    dp_id = cur.fetchone()["id"]
+
+    cur.execute(
+        """SELECT id, stage, l1_file FROM dataset_processing_stages
+           WHERE dataset_processing_id = %s AND l2_file = %s ORDER BY id DESC LIMIT 1""",
+        (dp_id, l2_file),
+    )
+    existing = cur.fetchone()
+    if existing:
+        if l1_file and not existing["l1_file"]:
+            cur.execute("UPDATE dataset_processing_stages SET l1_file = %s WHERE id = %s", (l1_file, existing["id"]))
+            return f"already recorded as {existing['stage']} run #{existing['id']} -- l1_file filled in"
+        return f"already recorded as {existing['stage']} run #{existing['id']} -- unchanged"
+
+    cur.execute("SELECT id FROM processing_packages WHERE name = %s", (package_name,))
+    pkg = cur.fetchone()
+    cur.execute(
+        """INSERT INTO dataset_processing_stages
+               (dataset_processing_id, stage, status, package_id, occurred_at, l1_file, l2_file, processing_notes)
+           VALUES (%s, %s, true, %s, %s, %s, %s, %s) RETURNING id""",
+        (dp_id, stage, pkg["id"] if pkg else None, occurred_at, l1_file, l2_file, note),
+    )
+    return f"new {stage} run #{cur.fetchone()['id']}"
+
+
 def replace_tracks(cur, mission_id, track):
     """Replace the mission's whole surface track with `track`.
 
@@ -319,7 +360,8 @@ def print_summary(kind, std_mission_name, path, metadata, track, warnings):
 # ---------------------------------------------------------------------
 
 def _ingest_and_write(
-    cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, commit, record_l2_file=False, find_l1_file=None
+    cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, commit, record_l2_file=False, find_l1_file=None,
+    classify_run=None,
 ):
     """Shared tail of both run_ingest() and run_ingest_by_number(): read the
     NetCDF, print the summary, write missions + tracks, commit or roll back.
@@ -332,7 +374,13 @@ def _ingest_and_write(
 
     find_l1_file(l2_path) -> (l1_path or None, note or None): when given
     and the L2 file was recorded, also record missions.l1_file. No L1 file
-    is fine -- l1_file is just left unchanged and the note says why."""
+    is fine -- l1_file is just left unchanged and the note says why.
+
+    classify_run(l2_path) -> (stage, package_name): when given and the L2
+    file was recorded, the files are also recorded as a processing run (see
+    record_processing_run), dated by the L2 file's modification time.
+    missions.l1_file / l2_file are still written too until the portal and
+    the ERDDAP push read mission_best_files (expand/contract)."""
     metadata, track, warnings = read_netcdf(l2_path)
     stored_l2 = stored_l1 = None
     if record_l2_file:
@@ -357,6 +405,14 @@ def _ingest_and_write(
         print(f"missions.l1_file set:  {stored_l1}")
     elif l1_note:
         print(f"missions.l1_file unchanged: {l1_note}")
+    if stored_l2 is not None and classify_run is not None:
+        stage, package_name = classify_run(l2_path)
+        made = datetime.fromtimestamp(os.path.getmtime(l2_path), tz=timezone.utc)
+        run = record_processing_run(
+            cur, mission_id, stage, package_name, stored_l1, stored_l2, made,
+            f"Recorded by the {kind} ingest from {stored_l2.rsplit('/', 1)[0]}/",
+        )
+        print(f"processing run:        {run}")
     n_deleted, n_written = replace_tracks(cur, mission_id, track)
     print(f"missions rows updated: {updated}")
     print(f"tracks rows replaced:  {n_deleted} old deleted, {n_written} written")
@@ -414,7 +470,7 @@ def run_ingest(kind, read_netcdf):
         conn.close()
 
 
-def run_ingest_by_number(kind, read_netcdf, find_l2_file, find_l1_file=None):
+def run_ingest_by_number(kind, read_netcdf, find_l2_file, find_l1_file=None, classify_run=None):
     """CLI + DB flow variant that resolves the mission by its mission_number
     and locates the L2 NetCDF on disk, instead of trusting missions.l2_file.
 
@@ -465,7 +521,7 @@ def run_ingest_by_number(kind, read_netcdf, find_l2_file, find_l1_file=None):
 
             _ingest_and_write(
                 cur, conn, kind, mission_id, std_name, l2_path, read_netcdf, args.commit,
-                record_l2_file=True, find_l1_file=find_l1_file,
+                record_l2_file=True, find_l1_file=find_l1_file, classify_run=classify_run,
             )
     finally:
         conn.close()

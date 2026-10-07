@@ -109,6 +109,18 @@ def is_l2_profile_file(path):
     return path.name.lower().endswith("up_and_down_profile.nc")
 
 
+def classify_run(l2_path):
+    """Which processing stage a Seaglider L2 file belongs to, from its folder:
+    under a `reprocessed...` folder (e.g. reprocessed_bs3/) it's the team's
+    post-mission reprocessing -> AUTO_QC; anything else (basestation/, or a
+    file loose in the mission folder on some older missions) is the
+    basestation's own automatic processing during the mission -> BASESTATION.
+    Nothing on disk marks manual QC, so MANUAL_QC is never inferred -- it's
+    recorded in the portal by whoever did the QC. Both are BS3 output."""
+    in_reprocessed = any("reprocessed" in part.lower() for part in Path(l2_path).parts)
+    return ("AUTO_QC" if in_reprocessed else "BASESTATION"), "Basestation3"
+
+
 def find_l1_file(l2_path):
     """The mission's L1 product: the basestation *timeseries.nc in the SAME
     folder as the L2 file that was read -- so L1 and L2 always come from the
@@ -335,4 +347,4 @@ def read_netcdf(path):
 
 
 if __name__ == "__main__":
-    run_ingest_by_number("Seaglider", read_netcdf, find_l2_file, find_l1_file)
+    run_ingest_by_number("Seaglider", read_netcdf, find_l2_file, find_l1_file, classify_run)

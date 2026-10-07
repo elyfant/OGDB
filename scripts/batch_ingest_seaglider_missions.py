@@ -59,7 +59,7 @@ from pathlib import Path
 import psycopg2
 import psycopg2.extras
 
-from ingest_seaglider_mission import find_l1_file, is_l2_profile_file, read_netcdf
+from ingest_seaglider_mission import classify_run, find_l1_file, is_l2_profile_file, read_netcdf
 from mission_ingest_common import _ingest_and_write, folder_mismatch, lookup_mission_by_number
 from settings import require_database_url, require_seaglider_data_root
 
@@ -170,7 +170,7 @@ def ingest_ready_missions(ready, commit):
                     std_name = row["std_mission_name"] or f"(mission_number {mission_number}, no std name yet)"
                     _ingest_and_write(
                         cur, conn, "Seaglider", row["id"], std_name, str(profile_path), read_netcdf, commit,
-                        record_l2_file=True, find_l1_file=find_l1_file,
+                        record_l2_file=True, find_l1_file=find_l1_file, classify_run=classify_run,
                     )
                     succeeded.append((mission_number, mission_dir))
                 except Exception as exc:

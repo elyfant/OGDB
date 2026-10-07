@@ -880,6 +880,34 @@ name, not a folder path. Nothing read the old name. Considered and deferred: a `
 -> per-machine mount) -- worth it once data spans more than one share or
 server; `naco/...` and `slocum/...` are effectively location names already.
 
+## Processing stages and where NetCDF paths live (2026-10-07)
+
+Stages (`dataset_processing_stages.stage`, `xxxx_processing_stages_qc_levels`)
+are named for their QC level; DM/PUB were renamed because "published" is a
+separate fact (`erddap_pushes`):
+
+| Code | Label | Best-file rank | Folder |
+|---|---|---|---|
+| `raw` | raw data (flashcard) | -- | Seaglider `flashcard/`, Slocum `raw/` |
+| `L0` | L0 dataset (Slocum NDP) | -- | Slocum `netcdf/` |
+| `BASESTATION` | basestation, automatic, during mission (Seaglider only) | 1 | `basestation/` |
+| `AUTO_QC` | reprocessed, auto-QC (was DM) | 2 | Seaglider `reprocessed_bs3/`, Slocum `netcdf/` |
+| `MANUAL_QC` | reprocessed, auto + manual QC (was PUB) | 3 | same files as its AUTO_QC run |
+
+Nothing on disk marks manual QC, so `MANUAL_QC` is recorded in the portal by
+whoever did it -- as a NEW run row (the table is append-only history), with
+the same files and their notes. `qc_done` is now redundant with the stage and
+can be retired later.
+
+NetCDF paths live on the run that produced them
+(`dataset_processing_stages.l1_file` / `l2_file`, relative to the projects
+folder). The best file per mission is computed by the `mission_best_files`
+view (per level: highest rank among completed runs, then latest) -- never
+stored. `missions.l1_file` / `l2_file` are the old pointer, kept only until
+the portal and the ERDDAP push read the view (expand/contract), then dropped.
+The ERDDAP URL is a different fact (the public address) and stays on
+`dataset_processing`.
+
 ## How I (Fiona) like to work — see also `~/.claude/CLAUDE.md`
 
 Explain reasoning, not just implementation. For architecture decisions, give

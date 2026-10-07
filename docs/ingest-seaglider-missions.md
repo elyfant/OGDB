@@ -24,6 +24,11 @@ OGDB. Two scripts, same code path underneath:
 - `missions.l1_file`: the `*timeseries.nc` in the same folder as that L2
   file, stored the same way. Optional -- if there's none (e.g. mission
   001), `l1_file` is left as it was and the ingest carries on.
+- a **processing run** (`dataset_processing_stages`) holding those L1/L2
+  paths: `BASESTATION` for a `basestation/` file, `AUTO_QC` for a
+  `reprocessed_bs3/` one. Re-ingesting the same file adds nothing. The
+  mission's best file (shown in the portal) is computed from these runs; a
+  manual-QC'd dataset is recorded in the portal as a `MANUAL_QC` run.
 - `tracks`: the mission's whole surface track, one point per dive. The
   existing track is deleted and replaced, so it always matches the file
   just ingested.
