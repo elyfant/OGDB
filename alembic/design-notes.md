@@ -908,6 +908,14 @@ the portal and the ERDDAP push read the view (expand/contract), then dropped.
 The ERDDAP URL is a different fact (the public address) and stays on
 `dataset_processing`.
 
+Runs recorded in the portal (OGDB-portal `DatasetsService.insertStageRecord`)
+never take file paths as input -- files come from the ingest scripts. Every
+portal save appends a run, so it carries over the files of the latest run of
+the same stage (editing notes mustn't make files vanish); a first
+`MANUAL_QC` run takes the latest `AUTO_QC` run's files, since manual QC is
+done on that same reprocessed dataset. The portal no longer reads or writes
+`missions.l1_file` / `l2_file` -- the mission page shows `mission_best_files`.
+
 ## How I (Fiona) like to work — see also `~/.claude/CLAUDE.md`
 
 Explain reasoning, not just implementation. For architecture decisions, give
