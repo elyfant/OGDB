@@ -263,7 +263,7 @@ def backfill_simple_tables(cur, commit, report):
                 cur.execute(
                     """
                     INSERT INTO assets (asset_type_id, serial_number, institute_id, manufacturer_id,
-                                         purchase_date, purchase_value_usd, notes)
+                                         purchase_date, purchase_value, notes)
                     VALUES (%(asset_type_id)s, %(serial_number)s, %(institute_id)s, %(manufacturer_id)s,
                             %(purchase_date)s, %(purchase_value_usd)s, %(notes)s)
                     RETURNING id
