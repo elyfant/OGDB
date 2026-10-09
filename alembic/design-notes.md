@@ -230,7 +230,8 @@ detail table names going forward.
   structure can be created now (nullable spec columns) even without the
   real values.
 - `asset_slocum_end_cap_details` fields (from Fiona, cross-checked against legacy
-  `section_end_cap`): `aft_end_cap_assy`, `date_created`, `digifin_type`,
+  `section_end_cap`): `aft_end_cap_assy`, `date_created` (later dropped into `assets.purchase_date`,
+  xxxx_drop_end_cap_date_created), `digifin_type`,
   `digifin`, `strobe_assy`, `pressure_transducer`, `air_bladder`,
   `u_vacuum_cal_m`, `u_vacuum_cal_b`, `f_ocean_pressure_min`,
   `f_ocean_pressure_max`. Kept the vacuum/pressure calibration values as

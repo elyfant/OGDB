@@ -191,11 +191,12 @@ def map_end_cap(row):
     parsed_date, ok = parse_legacy_date(row["date_created"])
     warning = None if ok else f"section_end_cap id={row['id']}: couldn't parse date_created={row['date_created']!r}"
     return {
-        "asset": {},
+        # date_created lives in assets.purchase_date now
+        # (xxxx_drop_end_cap_date_created).
+        "asset": {"purchase_date": parsed_date},
         "detail_table": "asset_slocum_end_cap_details",
         "detail": {
             "aft_end_cap_assy": row["aft_end_cap_assy"],
-            "date_created": parsed_date,
             "digifin_type": row["digifin_type"],
             "digifin": row["digifin"],
             "strobe_assy": row["strobe_assy"],
