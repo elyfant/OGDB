@@ -127,14 +127,44 @@ def find_l1_file(l2_path):
     same processing run (basestation/ vs reprocessed_bs3/). Optional: some
     missions (e.g. 001) have none.
 
+    An L1 file with no usable science data is skipped, not recorded (see
+    l1_problem) -- the L2 is still ingested either way.
+
     -> (path or None, note or None)."""
     folder = Path(l2_path).parent
     found = sorted(p for p in folder.iterdir() if p.is_file() and p.name.lower().endswith("timeseries.nc"))
-    if len(found) == 1:
-        return found[0], None
     if not found:
         return None, "no *timeseries.nc beside the L2 file"
-    return None, f"{len(found)} *timeseries.nc files beside the L2 file, refusing to guess"
+    if len(found) > 1:
+        return None, f"{len(found)} *timeseries.nc files beside the L2 file, refusing to guess"
+    problem = l1_problem(found[0])
+    if problem:
+        return None, f"{found[0].name} skipped -- {problem}; on the reprocessing list (L2 still ingested)"
+    return found[0], None
+
+
+def l1_problem(path):
+    """Why an L1 timeseries file can't be used, or None if it can.
+
+    Found in the archive (2026-10-12; all on the reprocessing list): files
+    with no variables at all (005/010/011, ~370 bytes); files whose
+    temperature/salinity are entirely NaN (004/006/007/008); and 2017-2020
+    "reduced" basestation files holding only per-dive summaries plus
+    conductivity_raw -- no temperature or salinity variable (029-042,
+    100, 101). Recording any of them as the mission's L1 would make it the
+    "best" L1 in OGDB and the file pushed to ERDDAP. Only temperature and
+    salinity are checked -- the data an L1 timeseries exists to carry."""
+    with Dataset(path) as ds:
+        if not ds.variables:
+            return "empty file (no variables)"
+        for label, names in (("temperature", ("temperature", "temp")), ("salinity", ("salinity",))):
+            name = next((n for n in names if n in ds.variables), None)
+            if name is None:
+                return f"no {label} variable"
+            values = np.ma.filled(ds[name][:].astype(float), np.nan)
+            if not np.isfinite(values).any():
+                return f"{label} has no valid values"
+    return None
 
 
 def find_l2_file(mission_number, row):

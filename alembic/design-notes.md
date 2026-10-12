@@ -903,8 +903,16 @@ can be retired later.
 NetCDF paths live on the run that produced them
 (`dataset_processing_stages.l1_file` / `l2_file`, relative to the projects
 folder). The best file per mission is computed by the `mission_best_files`
-view (per level: highest rank among completed runs, then latest) -- never
-stored. `missions.l1_file` / `l2_file` are the old pointer, kept only until
+view -- never stored. Only each stage's LATEST run (among completed runs
+with files) counts: a newer run supersedes older runs of that stage
+completely, so a stale run (e.g. files since moved, or an L1 since found
+unusable) can't keep supplying a file (`xxxx_best_files_latest_run_per_stage`,
+2026-10-12). Then per level: highest rank wins -- a lower stage's L1 is
+still used when the higher stage's latest run has none.
+
+The Seaglider ingest skips L1 files with no usable science data (empty, or
+temperature/salinity missing or all NaN -- see `l1_problem()` in
+`scripts/ingest_seaglider_mission.py`) and still ingests the L2. `missions.l1_file` / `l2_file` are the old pointer, kept only until
 the portal and the ERDDAP push read the view (expand/contract), then dropped.
 The ERDDAP URL is a different fact (the public address) and stays on
 `dataset_processing`.

@@ -238,9 +238,11 @@ def record_processing_run(cur, mission_id, stage, package_name, l1_file, l2_file
     mission_best_files view computes each mission's best L1/L2.
 
     Idempotent: if any run of this mission already has this l2_file, nothing
-    new is added (re-ingesting the same file must not grow the history); a
-    missing l1_file on that run is filled in. Otherwise a new completed run
-    is appended. Creates the mission's dataset_processing row if needed.
+    new is added (re-ingesting the same file must not grow the history); that
+    run's l1_file is brought in line with what this ingest found -- filled
+    in, or cleared when the L1 file is now missing or was skipped as
+    unusable. Otherwise a new completed run is appended. Creates the
+    mission's dataset_processing row if needed.
 
     Returns a one-line description of what happened, for the summary."""
     cur.execute(
@@ -257,9 +259,10 @@ def record_processing_run(cur, mission_id, stage, package_name, l1_file, l2_file
     )
     existing = cur.fetchone()
     if existing:
-        if l1_file and not existing["l1_file"]:
+        if l1_file != existing["l1_file"]:
             cur.execute("UPDATE dataset_processing_stages SET l1_file = %s WHERE id = %s", (l1_file, existing["id"]))
-            return f"already recorded as {existing['stage']} run #{existing['id']} -- l1_file filled in"
+            what = "filled in" if not existing["l1_file"] else ("cleared" if l1_file is None else "updated")
+            return f"already recorded as {existing['stage']} run #{existing['id']} -- l1_file {what}"
         return f"already recorded as {existing['stage']} run #{existing['id']} -- unchanged"
 
     cur.execute("SELECT id FROM processing_packages WHERE name = %s", (package_name,))
