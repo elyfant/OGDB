@@ -13,9 +13,9 @@ OGDB. Two scripts, same code path underneath:
 
 **Writes** (overwrites whatever was there):
 
-- `missions`: `launch_date`, `launch_latitude`, `launch_longitude`,
-  `end_date_science`, `recovery_date`, `recovery_latitude`,
-  `recovery_longitude`, `dives`, `distance_km`
+- `missions`: `deployment_date`, `deployment_latitude`, `deployment_longitude`,
+  `end_date_science`, `retrieval_date`, `retrieval_latitude`,
+  `retrieval_longitude`, `dives`, `distance_km`
 - `missions.l2_file`: the file it read, as a path inside the shared
   projects folder, e.g.
   `naco/data/delayed/095-.../basestation/x.nc` -- so you can see whether
@@ -34,7 +34,7 @@ OGDB. Two scripts, same code path underneath:
   just ingested.
 
 **Does not touch:** the mission number, mission name, glider, project,
-site, people, or anything outside `missions` and `tracks`.
+observatory, people, or anything outside `missions` and `tracks`.
 
 ## How it finds the data
 

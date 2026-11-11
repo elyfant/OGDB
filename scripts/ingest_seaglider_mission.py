@@ -57,16 +57,16 @@ What it does
 ------------
 1. Resolves the mission by id, finds the L2 NetCDF as above, and from the
    file computes:
-       launch_date / launch_latitude / launch_longitude   (start of first dive)
-       end_date_science / recovery_date                    (end of last profile)
-       recovery_latitude / recovery_longitude              (end of last profile)
+       deployment_date / deployment_latitude / deployment_longitude   (start of first dive)
+       end_date_science / retrieval_date                    (end of last profile)
+       retrieval_latitude / retrieval_longitude              (end of last profile)
        dives                                               (record count / 2)
        distance_km                                         (great-circle sum along
                                                             the surface track)
 2. Surface track: for every dive, the first sample of that dive's down cast ->
    latitude, longitude, utc, temperature, salinity (shallowest finite bin),
    dacu, dacv. A final row is appended for the last surfacing so the track
-   reaches the recovery position.
+   reaches the retrieval position.
 3. Overwrites those missions columns and replaces the mission's whole track
    (old points deleted, new ones inserted), one transaction. Also sets
    missions.l2_file to the file it read, relative to the projects folder
@@ -286,13 +286,13 @@ def _assemble(n, down_idx, warnings, start_lat, start_lon, start_time, end_lat, 
         )
 
     metadata = {
-        "launch_date": epoch_to_naive_utc(start_time[0]),
-        "launch_latitude": float(start_lat[0]),
-        "launch_longitude": float(start_lon[0]),
+        "deployment_date": epoch_to_naive_utc(start_time[0]),
+        "deployment_latitude": float(start_lat[0]),
+        "deployment_longitude": float(start_lon[0]),
         "end_date_science": epoch_to_naive_utc(end_time[last]),
-        "recovery_date": epoch_to_naive_utc(end_time[last]),
-        "recovery_latitude": float(end_lat[last]),
-        "recovery_longitude": float(end_lon[last]),
+        "retrieval_date": epoch_to_naive_utc(end_time[last]),
+        "retrieval_latitude": float(end_lat[last]),
+        "retrieval_longitude": float(end_lon[last]),
         "dives": int(len(down_idx)),
         "distance_km": round(track_length_km(track), 3),
     }

@@ -23,9 +23,9 @@ What it does
 ------------
 1. Resolves the mission by std_mission_name, reads its missions.l2_file (this
    NetCDF), and from the file computes:
-       launch_date / launch_latitude / launch_longitude   (first profile)
-       end_date_science / recovery_date                    (last profile)
-       recovery_latitude / recovery_longitude              (last profile)
+       deployment_date / deployment_latitude / deployment_longitude   (first profile)
+       end_date_science / retrieval_date                    (last profile)
+       retrieval_latitude / retrieval_longitude              (last profile)
        dives                                               (# of down casts,
                                                             PROFILE_DIRECTION == 1)
        distance_km                                         (span of
@@ -156,7 +156,7 @@ def read_netcdf(path):
 
         # segmented-file check: the time_coverage_start attr disagreeing with
         # the first real profile means this L2 file is only part of the mission,
-        # so dives / distance_km / launch_date reflect the file, not the mission.
+        # so dives / distance_km / deployment_date reflect the file, not the mission.
         # (This is a plain global attr, untouched by the OG1 variable rename.)
         tcs = (getattr(ds, "time_coverage_start", "") or "").strip()
         if tcs:
@@ -167,20 +167,20 @@ def read_netcdf(path):
                     warnings.append(
                         f"time_coverage_start attr is {tcs} but the first profile is "
                         f"{data_start} -- this L2 file looks like a partial mission; "
-                        "launch_date / dives / distance_km reflect only what's in it."
+                        "deployment_date / dives / distance_km reflect only what's in it."
                     )
             except (ValueError, TypeError):
                 pass
 
         first, last = int(keep[0]), int(keep[-1])
         metadata = {
-            "launch_date": epoch_to_naive_utc(t[first]),
-            "launch_latitude": float(lat[first]),
-            "launch_longitude": float(lon[first]),
+            "deployment_date": epoch_to_naive_utc(t[first]),
+            "deployment_latitude": float(lat[first]),
+            "deployment_longitude": float(lon[first]),
             "end_date_science": epoch_to_naive_utc(t[last]),
-            "recovery_date": epoch_to_naive_utc(t[last]),
-            "recovery_latitude": float(lat[last]),
-            "recovery_longitude": float(lon[last]),
+            "retrieval_date": epoch_to_naive_utc(t[last]),
+            "retrieval_latitude": float(lat[last]),
+            "retrieval_longitude": float(lon[last]),
             "dives": int(dives),
             "distance_km": round(distance_km, 3),
         }

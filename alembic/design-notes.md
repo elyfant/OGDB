@@ -942,6 +942,36 @@ level (`<mission_slug>_<level>.nc`, see norgliders-ERDDAP `ingest/ingest.py`),
 so a better file replaces the old one atomically instead of sitting next to
 it.
 
+## Vocabulary follows OceanOPS (2026-11-11)
+
+`xxxx_oceanops_terminology` renamed the mission/organisation words to the
+ones OceanOPS (GOOS Passport) and OG1 use, so the same word runs from the
+database to the passport submission:
+
+| Was | Now |
+|---|---|
+| `missions.launch_*` | `missions.deployment_*` |
+| `missions.recovery_*` | `missions.retrieval_*` |
+| `missions.site_id`, table `sites` | `missions.observatory_id`, table `observatories` |
+| `missions.technical_lead_id` | `missions.operations_manager_id` |
+| table `institutes`, `*.institute_id` | table `agencies`, `*.agency_id` |
+| `norglider_missions.site` / `.tech` | `.observatory` / `.operations_manager` |
+
+**Notes above this section were written before the rename and still use the
+old words** -- they are a dated log, so they are left as written.
+
+Not renamed, on purpose: mission status values (`scheduled` / `active` /
+`recovered`), asset status values (`deployed`), the Iridium cost buckets
+(`before_launch` / `after_recovery`, written by the external iridium-costs
+tool), and keys inside existing `audit_log` rows (history is not rewritten,
+so a mission's older audit rows say `launch_date` and newer ones say
+`deployment_date`).
+
+The migration is renames only (metadata changes, one transaction). Views
+did not need recreating: Postgres tracks the columns a view uses by
+identity, not name. Only the views' *output* column names had to be renamed
+explicitly.
+
 ## How I (Fiona) like to work — see also `~/.claude/CLAUDE.md`
 
 Explain reasoning, not just implementation. For architecture decisions, give

@@ -17,7 +17,7 @@ exists the script does nothing. Dry-run by default.
 Usage:
     python scripts/add_cls_goniometer.py                 # dry run
     python scripts/add_cls_goniometer.py --commit
-    python scripts/add_cls_goniometer.py --institute UIB --commit
+    python scripts/add_cls_goniometer.py --agency UIB --commit
 """
 import argparse
 import sys
@@ -46,7 +46,7 @@ def one(cur, sql, params):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--institute", default="UIB", help="institutes.name of the owner (default: UIB)")
+    parser.add_argument("--agency", default="UIB", help="agencies.name of the owner (default: UIB)")
     parser.add_argument("--commit", action="store_true", help="Actually write. Default is dry-run.")
     args = parser.parse_args()
 
@@ -54,9 +54,9 @@ def main():
     conn.autocommit = False
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            institute = one(cur, "SELECT id FROM institutes WHERE name = %s", (args.institute,))
-            if institute is None:
-                sys.exit(f"No institutes row named '{args.institute}' (see --institute).")
+            agency = one(cur, "SELECT id FROM agencies WHERE name = %s", (args.agency,))
+            if agency is None:
+                sys.exit(f"No agencies row named '{args.agency}' (see --agency).")
             cls = one(cur, "SELECT id FROM manufacturers WHERE name = 'CLS'", ())
             if cls is None:
                 sys.exit("No 'CLS' manufacturer -- run `alembic upgrade head` first.")
@@ -86,11 +86,11 @@ def main():
                 row = one(
                     cur,
                     """
-                    INSERT INTO assets (asset_type_id, manufacturer_id, institute_id, purchase_date,
+                    INSERT INTO assets (asset_type_id, manufacturer_id, agency_id, purchase_date,
                                         purchase_value, purchase_currency, notes)
                     VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
                     """,
-                    (equipment_type_id, cls["id"], institute["id"], PURCHASE_DATE, value, CURRENCY, notes),
+                    (equipment_type_id, cls["id"], agency["id"], PURCHASE_DATE, value, CURRENCY, notes),
                 )
                 ids[name] = row["id"]
                 cur.execute(

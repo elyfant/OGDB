@@ -1,12 +1,12 @@
--- Backfill mission_sea_names from mission.site, C19-only.
--- Idempotent (ON CONFLICT DO NOTHING). Confident site->sea mappings only;
--- ambiguous sites (DML, Northsvalbard, Porsangerfjorden, SOP, Svalbard) and
--- non-sea sites (Hornindalsvatn = lake, Masfjorden = fjord) are left for
+-- Backfill mission_sea_names from mission.observatory, C19-only.
+-- Idempotent (ON CONFLICT DO NOTHING). Confident observatory->sea mappings only;
+-- ambiguous observatories (DML, Northsvalbard, Porsangerfjorden, SOP, Svalbard) and
+-- non-sea observatories (Hornindalsvatn = lake, Masfjorden = fjord) are left for
 -- manual review.
 INSERT INTO mission_sea_names (mission_id, c19_term_id)
 SELECT m.id, t.id
 FROM missions m
-JOIN sites s   ON s.id = m.site_id
+JOIN observatories s ON s.id = m.observatory_id
 JOIN LATERAL (VALUES
     ('Baffin',        'C19/current/9_12/'),
     ('barents',       'C19/current/9_4/'),

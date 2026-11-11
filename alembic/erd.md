@@ -1,4 +1,4 @@
-Scoped to the active asset-tracking system — the redesigned core plus every table it actually connects to. Excluded deliberately: the `event_log`/`log_*` family (171 real rows, still untouched, not yet migrated) and fully-separate legacy tables (`tracks`, `vessels`, `cruises`, `sites`, `contacts`, `projects`, `piloting_category`) that don't connect into this structure. `changed_by → users` exists on almost every table (the generic audit trail) and is omitted from the diagram as repetitive — noted once here instead.
+Scoped to the active asset-tracking system — the redesigned core plus every table it actually connects to. Excluded deliberately: the `event_log`/`log_*` family (171 real rows, still untouched, not yet migrated) and fully-separate legacy tables (`tracks`, `vessels`, `cruises`, `observatories`, `contacts`, `projects`, `piloting_category`) that don't connect into this structure. `changed_by → users` exists on almost every table (the generic audit trail) and is omitted from the diagram as repetitive — noted once here instead.
 
 ```mermaid
 flowchart TD
@@ -40,7 +40,7 @@ flowchart TD
     end
 
     subgraph SHARED["Shared reference (pre-existing, still active)"]
-        institutes["institutes"]
+        agencies["agencies"]
         manufacturers["manufacturers"]
         platforms["platforms"]
         users["users"]
@@ -56,7 +56,7 @@ flowchart TD
     asset_assignments -->|parent_asset_id| assets
     asset_assignments -->|mission_id| missions
     assets -->|asset_type_id| asset_types
-    assets -->|institute_id| institutes
+    assets -->|agency_id| agencies
     assets -->|manufacturer_id| manufacturers
     asset_status_history -->|asset_id| assets
     asset_status_history -->|status_id| asset_status_options

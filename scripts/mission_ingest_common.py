@@ -27,13 +27,13 @@ EARTH_RADIUS_KM = 6371.0088
 # here -- l1_file is left alone; l2_file is the Slocum ingest's input, and
 # the Seaglider ingest sets it separately (update_mission's l2_file).
 MISSION_METADATA_COLUMNS = [
-    "launch_date",
-    "launch_latitude",
-    "launch_longitude",
+    "deployment_date",
+    "deployment_latitude",
+    "deployment_longitude",
     "end_date_science",
-    "recovery_date",
-    "recovery_latitude",
-    "recovery_longitude",
+    "retrieval_date",
+    "retrieval_latitude",
+    "retrieval_longitude",
     "dives",
     "distance_km",
 ]
@@ -134,10 +134,10 @@ def dedupe_track_by_utc(track):
 def resolve_mission(cur, std_mission_name):
     """Look the mission up by its standardised name (case-insensitive).
 
-    std_mission_name is the computed {glider}_{project}_{site}_{MonYYYY} form
+    std_mission_name is the computed {glider}_{project}_{observatory}_{MonYYYY} form
     exposed by the norglider_missions view, e.g. 'gna_naco_faroe_Jun2012' --
     the legacy missions.mission_name is often unrelated. The view computes it
-    from glider_asset_id / project / site / launch_date, so it is NULL until
+    from glider_asset_id / project / observatory / deployment_date, so it is NULL until
     all four are set; a mission missing any of them can't be resolved here yet.
 
     Returns (id, std_mission_name, l2_file).
@@ -155,7 +155,7 @@ def resolve_mission(cur, std_mission_name):
     if not rows:
         sys.exit(
             f"No mission with std_mission_name = {std_mission_name!r}. "
-            "(It is NULL until glider, project, site and launch_date are all set. "
+            "(It is NULL until glider, project, observatory and deployment_date are all set. "
             "This script never inserts missions.)"
         )
     if len(rows) > 1:
@@ -175,8 +175,8 @@ def lookup_mission_by_number(cur, mission_number):
 
     Returns a row with id (the PK -- what every write uses), std_mission_name
     and glider, or None if no mission has that number. std_mission_name may
-    be NULL (it's NULL until glider, project, site and launch_date are all
-    set) -- that doesn't block an ingest, which is what fills launch_date.
+    be NULL (it's NULL until glider, project, observatory and deployment_date are all
+    set) -- that doesn't block an ingest, which is what fills deployment_date.
     """
     cur.execute(
         """
